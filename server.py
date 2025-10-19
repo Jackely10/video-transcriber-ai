@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import Flask, abort, jsonify, request, send_from_directory
+from flask import Flask, Response, abort, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 
 from jobs import JOB_STORAGE_ROOT, enqueue_transcription_job, get_job_status
@@ -39,6 +39,38 @@ logging.basicConfig(
 app = Flask(__name__, static_folder="static", static_url_path="")
 add_payment_routes(app)
 logger = logging.getLogger("video_transcriber.server")
+
+_BASIC_AUTH_USER_ENV = "BASIC_AUTH_USERNAME"
+_BASIC_AUTH_PASS_ENV = "BASIC_AUTH_PASSWORD"
+_UNPROTECTED_ENDPOINTS = {"api_health", "healthz", "static"}
+_UNPROTECTED_PREFIXES = ("/health", "/api/health", "/static")
+
+
+def _basic_auth_enabled() -> bool:
+    return bool(os.getenv(_BASIC_AUTH_USER_ENV) and os.getenv(_BASIC_AUTH_PASS_ENV))
+
+
+@app.before_request
+def enforce_basic_auth() -> Optional[Response]:
+    if not _basic_auth_enabled():
+        return None
+    path = request.path or "/"
+    if path == "/" or any(path.startswith(prefix) for prefix in _UNPROTECTED_PREFIXES):
+        return None
+    endpoint = (request.endpoint or "").lower()
+    if endpoint in _UNPROTECTED_ENDPOINTS:
+        return None
+
+    auth = request.authorization
+    if not auth or auth.type.lower() != "basic":
+        return Response("", 401, {"WWW-Authenticate": 'Basic realm="Login Required"'})
+
+    expected_user = os.getenv(_BASIC_AUTH_USER_ENV, "")
+    expected_pass = os.getenv(_BASIC_AUTH_PASS_ENV, "")
+    if auth.username == expected_user and auth.password == expected_pass:
+        return None
+
+    return Response("", 401, {"WWW-Authenticate": 'Basic realm="Login Required"'})
 
 logger.info("=" * 80)
 logger.info("🚀 SERVER STARTING UP")

@@ -94,6 +94,27 @@ JOB=$(curl -s -X POST http://127.0.0.1:5000/jobs \
 curl http://127.0.0.1:5000/jobs/$JOB
 ```
 
+## Deploy zu Railway
+
+Dieses Repository enthaelt eine `Procfile`- und `nixpacks.toml`-Konfiguration, die Railway/Nixpacks fuer Web- und Worker-Prozesse verwendet.
+
+1. **Projekt importieren:** In Railway auf „New Project → Deploy from GitHub“ gehen und dieses Repo waehlen. Die Standard-Detektion sollte die mitgelieferten Nixpacks-Einstellungen benutzen (Python 3.11, ffmpeg via apt-get, `PIP_PREFER_BINARY=1`).
+2. **Variablen setzen (Web & Worker):**
+   - `REDIS_URL` (z. B. Upstash mit `rediss://`).
+   - `PIP_PREFER_BINARY=1` (fuer Wheel-Prioritaet).
+   - Optional: `WHISPER_DEVICE=cpu`, `WHISPER_CPU_MODEL_ID=tiny` fuer ressourcenschonende Modelle.
+   - Optionaler Zugriffsschutz: `BASIC_AUTH_USERNAME`, `BASIC_AUTH_PASSWORD` aktivieren HTTP Basic Auth fuer alle Routen ausser Health/Static.
+3. **Services anlegen:** Railway legt anhand der `Procfile` zwei Prozesse an:
+   - `web`: `gunicorn app:app --bind 0.0.0.0:$PORT`.
+   - `worker`: `rq worker default --url $REDIS_URL`.
+   Stelle sicher, dass beide Services auf dieselbe Environment-Variablen-Konfiguration zugreifen.
+4. **Redis bereitstellen:** In Railway „Add Plugin → Redis“ waehlen und die Connection-URL als `REDIS_URL` eintragen.
+5. **Deploy triggern:** Im Project Dashboard „Settings → Deployments → Clear Build Cache & Deploy“ ausfuehren (fuer Web und Worker). Die Builds sollten jetzt Wheels herunterladen, kein Source-Build.
+6. **Smoke-Test:**
+   - Web-Service starten lassen, im Log sicherstellen, dass keine Importfehler auftreten.
+   - Eine Transkription anstossen → Web-Log zeigt `Queued job …`.
+   - Worker-Log bestaetigt `default` Queue und erfolgreiche Abarbeitung.
+
 ## Health Check & Benchmark
 
 - `curl http://127.0.0.1:5000/health` zeigt `gpu`, `device_name`, `device_profile`, `rtf_10s` sowie Benchmark-Zeiten.
