@@ -14,7 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None  # type: ignore[assignment]
 import yt_dlp
 from faster_whisper import WhisperModel
 from yt_dlp.utils import DownloadError
@@ -105,7 +108,7 @@ def _select_device_profile(task: str, source_language: Optional[str]) -> DeviceP
     env_model = os.getenv("WHISPER_MODEL_ID")
     env_compute = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 
-    if torch.cuda.is_available() and os.getenv("WHISPER_DEVICE", "auto") != "cpu":
+    if torch is not None and torch.cuda.is_available() and os.getenv("WHISPER_DEVICE", "auto") != "cpu":
         model_id = env_model or os.getenv("WHISPER_GPU_MODEL_ID", "medium")
         return DeviceProfile(key=f"cuda_{model_id}", model_id=model_id, device="cuda", compute_type="float16")
 
@@ -410,13 +413,14 @@ if __name__ == "__main__":
 
 
 def get_runtime_device_info() -> Dict[str, object]:
+    cuda_available = torch.cuda.is_available() if torch is not None else False
     info: Dict[str, object] = {
-        "cuda_available": torch.cuda.is_available(),
+        "cuda_available": cuda_available,
         "device_name": "cpu",
         "total_vram_bytes": None,
         "cpu_threads": os.cpu_count() or 1,
     }
-    if info["cuda_available"]:
+    if cuda_available and torch is not None:
         info["device_name"] = torch.cuda.get_device_name(0)
         props = torch.cuda.get_device_properties(0)
         info["total_vram_bytes"] = int(props.total_memory)
