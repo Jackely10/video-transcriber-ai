@@ -1,0 +1,24 @@
+{
+  "job_id": "2e0c84f4-2e2d-4f64-aa6c-a440f3e9def1",
+  "timeline": [
+    {
+      "timestamp": "13:10:48",
+      "status": "failed",
+      "progress": 0.7
+    }
+  ],
+  "final_status": {
+    "job_id": "2e0c84f4-2e2d-4f64-aa6c-a440f3e9def1",
+    "status": "failed",
+    "progress": 0.7,
+    "step_times": {
+      "download": 7.3941147000005,
+      "extract": 0.35445279999112245,
+      "transcribe": 8.526040500000818
+    },
+    "rtf": null,
+    "device_profile": null,
+    "error": "'DeviceProfile' object has no attribute 'model_size'"
+  },
+  "error": null
+}

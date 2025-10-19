@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Pricing – Video Transcriber</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Inter", system-ui, -apple-system, Segoe UI, sans-serif;
+        background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+        color: #0f172a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 16px;
+      }
+
+      main {
+        width: min(1100px, 100%);
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 28px;
+        padding: 36px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+        display: grid;
+        gap: 32px;
+      }
+
+      header {
+        text-align: center;
+        display: grid;
+        gap: 12px;
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: clamp(2rem, 4vw, 2.8rem);
+      }
+
+      header p {
+        margin: 0;
+        color: #475569;
+        font-size: 1rem;
+      }
+
+      .email-capture {
+        display: grid;
+        gap: 8px;
+        max-width: 360px;
+        margin: 0 auto;
+      }
+
+      .email-capture label {
+        font-size: 0.95rem;
+        color: #334155;
+      }
+
+      .email-capture input {
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        font-size: 1rem;
+        transition: border-color 0.2s ease;
+      }
+
+      .email-capture input:focus {
+        outline: none;
+        border-color: #6366f1;
+      }
+
+      .plan-grid {
+        display: grid;
+        gap: 20px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .plan-card {
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 24px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        display: grid;
+        gap: 16px;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .plan-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 18px 40px rgba(79, 70, 229, 0.15);
+      }
+
+      .plan-name {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #1e293b;
+      }
+
+      .plan-price {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: #4f46e5;
+      }
+
+      .plan-minutes {
+        font-size: 0.95rem;
+        color: #475569;
+      }
+
+      .plan-card button {
+        border: none;
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        background: #4f46e5;
+        color: #fff;
+        transition: background 0.2s ease, transform 0.2s ease;
+      }
+
+      .deal-banner {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        border-radius: 18px;
+        padding: 18px 20px;
+        background: linear-gradient(135deg, rgba(79, 70, 229, 0.15), rgba(14, 165, 233, 0.2));
+        border: 1px solid rgba(99, 102, 241, 0.35);
+        color: #1e293b;
+      }
+
+      .deal-banner strong {
+        font-size: 1.15rem;
+        display: block;
+      }
+
+      .deal-countdown {
+        align-self: flex-start;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(79, 70, 229, 0.12);
+        color: #1f2937;
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+
+      .coupon-input {
+        display: grid;
+        gap: 8px;
+      }
+
+      .coupon-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .coupon-row input {
+        flex: 1 1 220px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        font-size: 1rem;
+      }
+
+      .coupon-row button {
+        padding: 12px 16px;
+        border-radius: 12px;
+        border: none;
+        background: #4f46e5;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .coupon-row button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 25px rgba(79, 70, 229, 0.35);
+      }
+
+      .coupon-feedback {
+        font-size: 0.9rem;
+        color: #1e293b;
+        min-height: 1.2em;
+      }
+
+      @media (max-width: 720px) {
+        .deal-banner {
+          text-align: center;
+        }
+        .deal-countdown {
+          justify-content: center;
+          align-self: center;
+        }
+      }
+
+      .plan-card button:hover {
+        background: #4338ca;
+        transform: translateY(-1px);
+      }
+
+      .plan-card button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .notice {
+        text-align: center;
+        font-size: 0.95rem;
+        color: #ef4444;
+      }
+
+      .pay-per-use {
+        background: #f8fafc;
+        border-radius: 18px;
+        padding: 24px;
+        border: 1px dashed rgba(99, 102, 241, 0.4);
+        display: grid;
+        gap: 12px;
+      }
+
+      .pay-per-use input {
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        font-size: 1rem;
+      }
+
+      .back-link {
+        text-align: center;
+      }
+
+      .back-link a {
+        color: #4f46e5;
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      @media (max-width: 640px) {
+        body {
+          padding: 24px 12px;
+        }
+
+        main {
+          padding: 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Wähle deinen Plan</h1>
+        <p>Monatliche Minuten-Packages und Flexibilität per Pay-per-Use.</p>
+      </header>
+      <div class="deal-banner">
+        <strong>Deal: Erste 50 Kunden erhalten 20% Rabatt mit EARLY20</strong>
+        <span>Nur noch 48 Stunden - Starter fuer 7,20 EUR statt 9 EUR. Launch-Special: Pro Plan -30% mit Code LAUNCH30.</span>
+        <div class="deal-countdown" id="dealCountdown">48:00:00</div>
+      </div>
+
+
+      <section class="email-capture">
+        <label for="pricingEmail">Business Email (fuer Stripe Checkout)</label>
+        <div class="coupon-input">
+          <label for="couponCode">Gutschein-Code</label>
+          <div class="coupon-row">
+            <input type="text" id="couponCode" placeholder="EARLY20 oder LAUNCH30" />
+            <button type="button" id="applyCouponBtn">Code pruefen</button>
+          </div>
+          <div class="coupon-feedback" id="couponFeedback"></div>
+        </div>
+      </section>
+
+
+      <div id="notice" class="notice" role="alert" style="display: none;"></div>
+
+      <section class="plan-grid" id="planGrid"></section>
+
+      <section class="pay-per-use">
+        <h2>Pay-per-Use</h2>
+        <p>Flexibel nach Minuten bezahlen – perfekt für spontane Transkriptionen.</p>
+        <label for="ppuMinutes">Minuten auswählen</label>
+        <input type="number" id="ppuMinutes" min="1" value="30" step="1" />
+        <button id="ppuButton" type="button">Checkout starten</button>
+      </section>
+
+      <div class="back-link">
+        <a href="/">← Zurück zum Dashboard</a>
+      </div>
+    </main>
+
+    <script>
+      const planGrid = document.getElementById("planGrid");
+      const notice = document.getElementById("notice");
+      const pricingEmailInput = document.getElementById("pricingEmail");
+      const payPerUseButton = document.getElementById("ppuButton");
+      const payPerUseMinutesInput = document.getElementById("ppuMinutes");
+      const couponInput = document.getElementById("couponCode");
+      const couponFeedback = document.getElementById("couponFeedback");
+      const applyCouponBtn = document.getElementById("applyCouponBtn");
+      const dealCountdownEl = document.getElementById("dealCountdown");
+      let plans = {};
+      const KNOWN_COUPONS = {
+        EARLY20: { message: "20% Rabatt auf alle Abos", plans: null },
+        LAUNCH30: { message: "30% Rabatt auf den Pro-Plan", plans: ["pro"] },
+      };
+
+      function showNotice(message, isError = true) {
+        if (!notice) return;
+        notice.textContent = message;
+        notice.style.color = isError ? "#ef4444" : "#15803d";
+        notice.style.display = "block";
+      }
+
+      function clearNotice() {
+        if (!notice) return;
+        notice.textContent = "";
+        notice.style.display = "none";
+      }
+
+      function normalizeCoupon() {
+        if (!couponInput) return "";
+        return couponInput.value.trim().toUpperCase();
+      }
+
+      function getCouponDetails(code) {
+        if (!code) return null;
+        return KNOWN_COUPONS[code] || null;
+      }
+
+      function isCouponValidForPlan(code, planId) {
+        const details = getCouponDetails(code);
+        if (!details) return false;
+        if (!details.plans) return true;
+        return details.plans.includes(planId);
+      }
+
+      function updateCouponFeedback(planId) {
+        if (!couponFeedback) return true;
+        const code = normalizeCoupon();
+        if (!code) {
+          couponFeedback.textContent = "";
+          couponFeedback.style.color = "#1e293b";
+          return true;
+        }
+        const details = getCouponDetails(code);
+        if (!details) {
+          couponFeedback.textContent = "Unbekannter Gutschein-Code.";
+          couponFeedback.style.color = "#dc2626";
+          return false;
+        }
+        const valid = !planId || isCouponValidForPlan(code, planId);
+        couponFeedback.textContent = details.message + (valid ? "" : " - nicht fuer diesen Plan verfuegbar.");
+        couponFeedback.style.color = valid ? "#15803d" : "#dc2626";
+        return valid;
+      }
+
+      function initializeCountdown(hours = 48) {
+        if (!dealCountdownEl) return;
+        const storageKey = "vt_deal_deadline";
+        let deadline = Number(localStorage.getItem(storageKey) || 0);
+        const now = Date.now();
+        if (!deadline || deadline <= now) {
+          deadline = now + hours * 60 * 60 * 1000;
+          localStorage.setItem(storageKey, String(deadline));
+        }
+        function updateCountdown() {
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) {
+            dealCountdownEl.textContent = "Aktion endet!";
+            return;
+          }
+          const totalSeconds = Math.floor(remaining / 1000);
+          const hoursLeft = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+          const minutesLeft = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+          const secondsLeft = String(totalSeconds % 60).padStart(2, "0");
+          dealCountdownEl.textContent = `${hoursLeft}:${minutesLeft}:${secondsLeft}`;
+        }
+        updateCountdown();
+        setInterval(updateCountdown, 1000);
+      }
+
+      function renderPlans() {
+        if (!planGrid) return;
+        planGrid.innerHTML = "";
+
+        Object.entries(plans).forEach(([planId, plan]) => {
+          const isFree = !plan.price;
+          const card = document.createElement("div");
+          card.className = "plan-card";
+          const priceLabel = isFree ? "€0" : `€${plan.price}`;
+          card.innerHTML = `
+            <div class="plan-name">${plan.name}</div>
+            <div class="plan-price">${priceLabel}<span style="font-size: 1rem; color: #475569;">/Monat</span></div>
+            <div class="plan-minutes">${planId === "free" && !plan.minutes ? 30 : plan.minutes} Minuten inklusive</div>
+            <button ${isFree ? "disabled" : `data-plan=\"${planId}\"`} type="button">${isFree ? "Kostenlos" : "Plan wählen"}</button>
+          `;
+          planGrid.appendChild(card);
+        });
+
+        planGrid.querySelectorAll("button[data-plan]").forEach((button) => {
+          button.addEventListener("click", async (event) => {
+            const planId = event.currentTarget.getAttribute("data-plan");
+            await startSubscriptionCheckout(planId);
+          });
+        });
+      }
+
+      async function loadPlans() {
+        try {
+          const response = await fetch("/api/pricing");
+          if (!response.ok) {
+            throw new Error("Pricing konnte nicht geladen werden");
+          }
+          const data = await response.json();
+          plans = data.plans || {};
+          renderPlans();
+          if (typeof data.pay_per_use_rate === "number" && payPerUseButton) {
+            const rateEuros = data.pay_per_use_rate;
+            const formatted = rateEuros.toFixed(2).replace(".", ",");
+            payPerUseButton.textContent = `Checkout starten (${formatted} € pro Minute)`;
+          }
+        } catch (error) {
+          showNotice(error.message || "Unbekannter Fehler beim Laden der Preise");
+        }
+      }
+
+      function getEmailValue() {
+        return pricingEmailInput ? pricingEmailInput.value.trim() : "";
+      }
+
+      async function startSubscriptionCheckout(planId) {
+        clearNotice();
+        const email = getEmailValue();
+        if (!email || !email.includes("@")) {
+          showNotice("Bitte eine gueltige Email-Adresse angeben.");
+          return;
+        }
+        const couponCode = normalizeCoupon();
+        const couponValid = updateCouponFeedback(planId);
+        if (!couponValid) {
+          showNotice("Dieser Gutschein gilt nicht fuer den ausgewaehlten Plan.");
+          return;
+        }
+        try {
+          const payload = { plan_id: planId, email };
+          if (couponCode) {
+            payload.coupon_code = couponCode;
+          }
+          const response = await fetch("/api/checkout/subscription", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const payloadResponse = await response.json();
+          if (!response.ok) {
+            throw new Error(payloadResponse.error || "Checkout konnte nicht gestartet werden");
+          }
+          showNotice("Weiterleitung zu Stripe...", false);
+          window.location.href = payloadResponse.checkout_url;
+        } catch (error) {
+          showNotice(error.message || "Checkout fehlgeschlagen");
+        }
+      }
+
+      async function startPayPerUseCheckout() {
+        clearNotice();
+        const email = getEmailValue();
+        if (!email || !email.includes("@")) {
+          showNotice("Bitte eine gültige Email-Adresse angeben.");
+          return;
+        }
+        const minutes = Number(payPerUseMinutesInput ? payPerUseMinutesInput.value : 0);
+        if (!minutes || minutes <= 0) {
+          showNotice("Bitte eine gültige Minutenanzahl eingeben.");
+          return;
+        }
+        try {
+          const response = await fetch("/api/checkout/pay-per-use", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ minutes, email }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || "Checkout konnte nicht gestartet werden");
+          }
+          window.location.href = payload.checkout_url;
+        } catch (error) {
+          showNotice(error.message || "Checkout fehlgeschlagen");
+        }
+      }
+
+      if (applyCouponBtn) {
+        applyCouponBtn.addEventListener("click", () => updateCouponFeedback());
+      }
+      if (couponInput) {
+        couponInput.addEventListener("input", () => updateCouponFeedback());
+      }
+
+      initializeCountdown();
+      updateCouponFeedback();
+
+      if (payPerUseButton) {
+        payPerUseButton.addEventListener("click", startPayPerUseCheckout);
+      }
+
+      loadPlans();
+    </script>
+  </body>
+</html>
+
+
+
+
+

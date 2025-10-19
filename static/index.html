@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Video Transcriber</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Inter", system-ui, -apple-system, Segoe UI, sans-serif;
+        background: radial-gradient(circle at top, #1f2937 0%, #0f172a 55%, #020617 100%);
+        color: #f8fafc;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 16px;
+      }
+
+      main {
+        width: min(1100px, 100%);
+        background: rgba(15, 23, 42, 0.75);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 24px;
+        padding: 32px;
+        box-shadow: 0 30px 80px rgba(2, 6, 23, 0.45);
+        display: grid;
+        gap: 24px;
+        position: relative;
+      }
+
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        text-align: center;
+      }
+
+      header h1 {
+        font-size: clamp(2rem, 4vw, 2.8rem);
+        margin: 0;
+      }
+
+      header p {
+        margin: 0;
+        color: #cbd5f5;
+      }
+
+      .hero-meta {
+        display: grid;
+        gap: 16px;
+        margin-top: 16px;
+      }
+
+      .metric-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(99, 102, 241, 0.35));
+        border-radius: 999px;
+        padding: 10px 20px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #e0f2fe;
+        box-shadow: 0 8px 24px rgba(56, 189, 248, 0.25);
+      }
+
+      .metric-badge span {
+        font-size: 1.05rem;
+        font-weight: 700;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+      }
+
+      .meta-pill {
+        background: rgba(30, 41, 59, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 16px;
+        padding: 12px 16px;
+        font-size: 0.9rem;
+        color: #cbd5f5;
+        display: grid;
+        gap: 4px;
+      }
+
+      .meta-pill strong {
+        font-size: 1.1rem;
+        color: #38bdf8;
+      }
+
+      .trust-badges {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+      }
+
+      .trust-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        font-size: 0.9rem;
+        border-radius: 14px;
+        background: rgba(30, 64, 175, 0.4);
+        border: 1px solid rgba(129, 140, 248, 0.35);
+        color: #e0e7ff;
+      }
+
+      .live-counter {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 0.95rem;
+        color: #a5b4fc;
+      }
+
+      .live-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #34d399;
+        box-shadow: 0 0 0 rgba(52, 211, 153, 0.7);
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7);
+        }
+        70% {
+          box-shadow: 0 0 0 10px rgba(52, 211, 153, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+        }
+      }
+
+      .content-section {
+        background: rgba(15, 23, 42, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 18px;
+        padding: 24px;
+        display: grid;
+        gap: 16px;
+      }
+
+      .content-section h2 {
+        margin: 0;
+        font-size: 1.6rem;
+      }
+
+      .video-demo-wrapper {
+        position: relative;
+        width: 100%;
+        padding-top: 56.25%;
+        border-radius: 16px;
+        overflow: hidden;
+        background: radial-gradient(circle at center, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.15));
+        display: grid;
+        place-items: center;
+      }
+
+      .video-demo-wrapper iframe,
+      .video-demo-wrapper video {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+
+      .video-placeholder {
+        display: grid;
+        gap: 12px;
+        text-align: center;
+        padding: 32px;
+        color: #e2e8f0;
+      }
+
+      .video-placeholder button {
+        justify-self: center;
+        padding: 10px 16px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background: rgba(59, 130, 246, 0.35);
+        color: #f8fafc;
+        cursor: pointer;
+        font-size: 0.95rem;
+      }
+
+      .comparison-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.95rem;
+      }
+
+      .comparison-table th,
+      .comparison-table td {
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        padding: 12px 14px;
+        text-align: left;
+      }
+
+      .comparison-table th {
+        background: rgba(79, 70, 229, 0.25);
+        font-size: 1rem;
+      }
+
+      .comparison-table tbody tr:nth-child(odd) {
+        background: rgba(15, 23, 42, 0.35);
+      }
+
+      .comparison-table tbody tr:nth-child(even) {
+        background: rgba(15, 23, 42, 0.45);
+      }
+
+      .faq-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .faq-item {
+        background: rgba(15, 23, 42, 0.45);
+        border: 1px solid rgba(129, 140, 248, 0.25);
+        border-radius: 14px;
+        padding: 16px;
+      }
+
+      .faq-item summary {
+        cursor: pointer;
+        font-weight: 600;
+        color: #e0e7ff;
+      }
+
+      .faq-item p {
+        margin: 12px 0 0;
+        color: #cbd5f5;
+        line-height: 1.5;
+      }
+
+      @media (max-width: 720px) {
+        .meta-grid {
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        }
+        .content-section {
+          padding: 20px;
+        }
+      }
+
+      form {
+        display: grid;
+        gap: 16px;
+        background: rgba(30, 41, 59, 0.55);
+        border-radius: 18px;
+        padding: 20px 24px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 0.95rem;
+        color: #e2e8f0;
+      }
+
+      .input-group {
+        display: grid;
+        gap: 6px;
+        font-size: 0.95rem;
+        color: #e2e8f0;
+      }
+
+      input[type="url"],
+      input[type="email"],
+      input[type="file"],
+      select {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.65);
+        color: inherit;
+        font-size: 1rem;
+        transition: border-color 0.2s ease, transform 0.2s ease;
+      }
+
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: #38bdf8;
+        transform: translateY(-1px);
+      }
+
+      .options {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .option-card {
+        background: rgba(15, 23, 42, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 16px;
+        padding: 16px;
+        display: grid;
+        gap: 12px;
+      }
+
+      \.option-card h3 {
+        font-size: 0.95rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #94a3b8;
+      }
+
+      .switch {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.95rem;
+      }
+
+      .switch input {
+        width: auto;
+        transform: scale(1.2);
+      }
+
+      .premium-feature {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin: 16px 0 12px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        background: rgba(30, 64, 175, 0.18);
+        border: 1px solid rgba(99, 102, 241, 0.35);
+        color: #e2e8f0;
+      }
+
+      .premium-feature input[type="checkbox"] {
+        margin-top: 4px;
+      }
+
+      .premium-feature label {
+        display: grid;
+        gap: 6px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .premium-feature label small {
+        font-size: 0.85rem;
+        color: #cbd5f5;
+        font-weight: 400;
+      }
+
+      .summary-error {
+        margin-top: 8px;
+        font-size: 0.9rem;
+        color: #fca5a5;
+      }
+
+      button[type="submit"] {
+        margin-top: 8px;
+        padding: 14px 20px;
+        border-radius: 14px;
+        border: none;
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #0f172a;
+        background: linear-gradient(135deg, #38bdf8 0%, #818cf8 60%, #c084fc 100%);
+        cursor: pointer;
+        box-shadow: 0 12px 30px rgba(129, 140, 248, 0.35);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      button[type="submit"]:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 18px 35px rgba(99, 102, 241, 0.45);
+      }
+
+      section {
+        background: rgba(15, 23, 42, 0.55);
+        border-radius: 18px;
+        padding: 20px 24px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        display: grid;
+        gap: 16px;
+      }
+
+      .status-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .progress-wrapper {
+        background: rgba(15, 23, 42, 0.7);
+        border-radius: 14px;
+        padding: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        display: grid;
+        gap: 10px;
+      }
+
+      .progress-track {
+        position: relative;
+        height: 12px;
+        border-radius: 12px;
+        background: rgba(148, 163, 184, 0.25);
+        overflow: hidden;
+      }
+
+      .progress-bar {
+        position: absolute;
+        inset: 0;
+        width: 0%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #38bdf8 0%, #6366f1 60%, #ec4899 100%);
+        transition: width 0.4s ease;
+      }
+
+      .progress-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.9rem;
+        color: #94a3b8;
+      }
+
+      .status-feed {
+        display: grid;
+        gap: 8px;
+        max-height: 180px;
+        overflow-y: auto;
+      }
+
+      .status-item {
+        border-radius: 12px;
+        padding: 12px;
+        background: rgba(30, 41, 59, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        font-size: 0.9rem;
+      }
+
+      .result-card {
+        background: rgba(15, 23, 42, 0.65);
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        padding: 18px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .result-card h3 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      .downloads {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .download-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        background: rgba(30, 41, 59, 0.65);
+        color: #e2e8f0;
+        text-decoration: none;
+        font-size: 0.9rem;
+        transition: transform 0.2s ease, border-color 0.2s ease;
+      }
+
+      .download-link:hover {
+        transform: translateY(-1px);
+        border-color: #38bdf8;
+      }
+
+      .stats-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      }
+
+      .stat-card {
+        background: rgba(30, 41, 59, 0.55);
+        border-radius: 14px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        padding: 12px 14px;
+        display: grid;
+        gap: 4px;
+      }
+
+      .stat-label {
+        font-size: 0.8rem;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .stat-value {
+        font-size: 1.1rem;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .notice {
+        display: none;
+        margin-bottom: 16px;
+        padding: 12px 16px;
+        border-radius: 12px;
+        font-size: 0.95rem;
+      }
+
+      .notice.active {
+        display: block;
+      }
+
+      .notice.error {
+        background: rgba(251, 113, 133, 0.18);
+        border: 1px solid rgba(248, 113, 113, 0.45);
+        color: #fecaca;
+      }
+
+      #status-section {
+        display: none;
+      }
+
+      #status-section.active {
+        display: block;
+      }
+
+      #results-section {
+        display: none;
+      }
+
+      #results-section.active {
+        display: block;
+      }
+
+      /* AI-Summary Tabellen */
+      .summary-text table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      }
+
+      .summary-text table th {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px;
+        text-align: left;
+        font-weight: 600;
+      }
+
+      .summary-text table td {
+        padding: 15px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        color: #e0e0e0;
+      }
+
+      .summary-text table tr:hover {
+        background: rgba(102, 126, 234, 0.15);
+      }
+
+      .summary-text h2 {
+        color: #667eea;
+        margin-top: 25px;
+        margin-bottom: 15px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div style="position: absolute; top: 20px; right: 20px;">
+          <select id="langSwitch" onchange="switchLang(this.value)" style="padding: 8px; border-radius: 5px;">
+            <option value="de">Deutsch</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <h1 data-i18n="hero_title">Video Transcriber</h1>
+        <p class="subtitle" data-i18n="hero_subtitle">Whisper powered Transkription mit Live-Status, ETA und Direkt-Downloads.</p>
+        <div class="hero-meta">
+          <div class="metric-badge" id="totalVideosBadge">
+            <span class="metric-number">0</span>
+            <span data-i18n="videos_processed">Videos verarbeitet</span>
+          </div>
+          <div class="meta-grid">
+            <div class="meta-pill">
+              <strong id="totalMinutesBadge">0</strong>
+              <span data-i18n="minutes_transcribed">Minuten transkribiert</span>
+            </div>
+            <div class="meta-pill">
+              <strong id="totalUsersBadge">0</strong>
+              <span data-i18n="teams_trust">Teams vertrauen uns</span>
+            </div>
+          </div>
+          <div class="trust-badges">
+            <span class="trust-badge" data-i18n="trust_badge_ssl">SSL-verschl&uuml;sselt</span>
+            <span class="trust-badge" data-i18n="trust_badge_gdpr">DSGVO-konform</span>
+            <span class="trust-badge" data-i18n="trust_badge_secure">Sicherer Cloud-Storage</span>
+          </div>
+          <div class="live-counter">
+            <span class="live-dot"></span>
+            <span data-i18n="live_label">Live:</span>
+            <span class="live-counter-value" id="liveCounterValue">0</span>
+            <span data-i18n="live_jobs">Jobs werden live verarbeitet</span>
+          </div>
+        </div>
+      </header>
+
+      <div id="error-container" class="notice error"></div>
+
+      <form id="job-form">
+        <div class="input-group">
+          <label for="videoUrl" data-i18n="video_url_label">Video URL</label>
+          <input
+            type="url"
+            name="video_url"
+            id="videoUrl"
+            placeholder="YouTube, Facebook, etc."
+          />
+        </div>
+
+        <div class="input-group">
+          <label for="userEmail" data-i18n="email_label">Deine Email (f�r Credits)</label>
+          <input
+            type="email"
+            name="email"
+            id="userEmail"
+            placeholder="deineemail.com"
+            required
+          />
+        </div>
+
+        <div class="premium-feature">
+          <input type="checkbox" id="addSummary" name="add_summary" value="1" />
+          <label for="addSummary">
+            <span data-i18n="add_summary_label">?? AI-Zusammenfassung hinzuf�gen (+3)</span>
+            <small data-i18n="add_summary_hint">
+	<!-- Sprach-Auswahl f�r Summary (nur sichtbar wenn AI-Summary aktiviert) -->
+	<div id="summary-lang-selector" style="display: none; margin-left: 30px; margin-top: 10px;">
+		<label for="summary-lang">?? Zusammenfassung in:</label>
+		<select id="summary-lang" name="summary_lang">
+			<option value="auto" selected>?? Automatisch (Video-Sprache)</option>
+			<option value="de">???? Deutsch</option>
+			<option value="en">???? English</option>
+			<option value="ar">??????????? (Arabisch)</option>
+			<option value="fr">???? Fran�ais</option>
+			<option value="es">???? Espa�ol</option>
+		</select>
+	</div>
+              Spare Zeit: Erhalte Key-Points in 3 Minuten statt 2 Stunden Video schauen!
+            </small>
+          </label>
+        </div>
+
+        <!-- Sprach-Auswahl f�r Summary -->
+        <div id="summary-lang-selector" style="display: none; margin-left: 30px; margin-top: 15px;">
+          <label for="summary-lang" style="font-size: 14px;">
+            ?? <span data-i18n="summary-language">Zusammenfassung in:</span>
+          </label>
+          <select id="summary-lang" name="summary-lang" style="padding: 8px; border-radius: 5px;">
+            <option value="auto" selected>?? Automatisch (Video-Sprache)</option>
+            <option value="de">???? Deutsch</option>
+            <option value="en">???? English</option>
+            <option value="ar">???? ??????? (Arabisch)</option>
+            <option value="fr">???? Fran�ais</option>
+            <option value="es">???? Espa�ol</option>
+          </select>
+        </div>
+
+        <div
+          class="credits-info"
+          style="background: #f0f9ff; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: none;"
+          id="creditsInfo"
+        >
+          <div class="credits-label" style="font-size: 14px; color: #555;">
+            <span data-i18n="available_credits">Verf�gbare Credits</span>: <strong id="creditsRemaining">--</strong>
+          </div>
+          <div style="font-size: 12px; color: #888; margin-top: 5px;">
+            <span data-i18n="plan">Plan</span>: <span id="userPlan">--</span>
+            <a href="/pricing.html" style="color: #667eea;" data-i18n="upgrade">Upgrade</a>
+          </div>
+          <div
+            id="rateLimitInfo"
+            style="font-size: 12px; color: #555; margin-top: 5px; display: none;"
+          >
+            <span data-i18n="jobs_hour">Jobs diese Stunde</span>:
+            <span id="jobsThisHour">--</span>
+            /
+            <span id="hourlyLimit">--</span> <span data-i18n="minutes">Minuten</span>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label for="fileUpload" data-i18n="file_upload_label">Datei Upload (optional)</label>
+          <input type="file" name="file" id="fileUpload" accept="audio/*,video/*" />
+        </div>
+
+        <div class="options">
+          <div class="option-card">
+            <h3 data-i18n="task_section">AUFGABE</h3>
+            <label>
+              <span data-i18n="whisper_task_label">Whisper Task</span>
+              <select name="whisperTask" id="whisperTask">
+                <option value="transcribe" data-i18n="task_transcribe" selected>Originalsprache (transcribe)</option>
+                <option value="translate" data-i18n="task_translate">�bersetzen ( Englisch)</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="profile_label">Profil</span>
+              <select name="profile" id="profile">
+                <option value="fast" data-i18n="profile_fast" selected>Fast (CPU Base)</option>
+                <option value="pro" data-i18n="profile_pro">Pro</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="option-card">
+            <h3 data-i18n="settings_section">EINSTELLUNGEN</h3>
+            <label>
+              <span data-i18n="source_language_label">Quellsprache (optional)</span>
+              <input type="text" name="sourceLanguage" id="sourceLanguage" placeholder="z. B. en, de" />
+            </label>
+            <label class="switch">
+              <input type="checkbox" name="includeSource" id="includeSource" checked />
+              <span data-i18n="keep_original">Original-Transkript beilegen</span>
+            </label>
+          </div>
+        </div>
+
+        <button type="submit" data-i18n="start_button">Transkription starten</button>
+      </form>
+
+      <section class="content-section comparison">
+        <h2 data-i18n="comparison_title">Warum Video Transcriber?</h2>
+        <p>Vergleich die Optionen und entdecke, warum unsere Kombination aus Preis, Qualität und Tempo überzeugt.</p>
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th data-i18n="comparison_manual">Manuell</th>
+              <th data-i18n="comparison_others">Andere Tools</th>
+              <th data-i18n="comparison_us">Video Transcriber</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-i18n="price_per_min">Preis pro Minute</td>
+              <td>2–3 €</td>
+              <td>0,25 €</td>
+              <td>0,10 €</td>
+            </tr>
+            <tr>
+              <td data-i18n="quality">Qualität</td>
+              <td>Variabel</td>
+              <td>Gut</td>
+              <td>Studio-Level mit Whisper</td>
+            </tr>
+            <tr>
+              <td data-i18n="languages">Sprachen</td>
+              <td>Alle (mit Profi)</td>
+              <td>≈50</td>
+              <td>90+</td>
+            </tr>
+            <tr>
+              <td data-i18n="speed">Speed</td>
+              <td>Stunden</td>
+              <td>≈5 Minuten</td>
+              <td>≈2 Minuten</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="content-section faq">
+        <h2 data-i18n="faq_title">H�ufig gestellte Fragen</h2>
+        <div class="faq-list">
+          <details class="faq-item" open>
+            <summary data-i18n="faq_languages">Welche Sprachen werden unterst�tzt?</summary>
+            <p>Video Transcriber deckt über 90 Sprachen ab – ideal für globale Content-Teams.</p>
+          </details>
+          <details class="faq-item">
+            <summary data-i18n="faq_duration">Wie lange dauert die Verarbeitung?</summary>
+            <p>Nur 1–2 Minuten pro Video. Du verfolgst jeden Schritt live im Dashboard.</p>
+          </details>
+          <details class="faq-item">
+            <summary data-i18n="faq_secure">Sind meine Daten sicher?</summary>
+            <p>Ja. Wir arbeiten DSGVO-konform, SSL-verschlüsselt und hosten in der EU.</p>
+          </details>
+          <details class="faq-item">
+            <summary data-i18n="faq_cancel">Kann ich k�ndigen?</summary>
+            <p>Natürlich — du kannst jederzeit kündigen oder im Free-Plan bleiben.</p>
+          </details>
+        </div>
+      </section>
+
+      <section id="status-section" class="hidden">
+        <div class="status-grid">
+          <div class="progress-wrapper">
+            <div class="progress-meta">
+              <span id="status-text">Warte auf Status...</span>
+              <span id="status-eta">ETA —</span>
+            </div>
+            <div class="progress-track">
+              <div id="progress-bar" class="progress-bar"></div>
+            </div>
+            <div class="progress-meta">
+              <span id="status-percent">0%</span>
+              <span id="status-elapsed">0s</span>
+            </div>
+          </div>
+
+          <div class="status-feed" id="status-feed"></div>
+        </div>
+      </section>
+
+      <section id="results-section" class="hidden">
+        <div id="stats" class="stats-grid"></div>
+        <div id="results"></div>
+      </section>
+    </main>
+
+    <script>
+      const POLL_INTERVAL_MS = 3000;
+      const form = document.querySelector("#job-form");
+      const statusSection = document.querySelector("#status-section");
+      const progressBar = document.querySelector("#progress-bar");
+      const statusText = document.querySelector("#status-text");
+      const statusPercent = document.querySelector("#status-percent");
+      const statusElapsed = document.querySelector("#status-elapsed");
+      const statusEta = document.querySelector("#status-eta");
+      const statusFeed = document.querySelector("#status-feed");
+      const resultsSection = document.querySelector("#results-section");
+      const resultsContainer = document.querySelector("#results");
+      const statsContainer = document.querySelector("#stats");
+      const notice = document.getElementById("notice");
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const videoUrlInput = document.getElementById("videoUrl");
+      const fileInput = document.getElementById("fileUpload");
+      const whisperTaskInput = document.getElementById("whisperTask");
+      const profileInput = document.getElementById("profile");
+      const sourceLanguageInput = document.getElementById("sourceLanguage");
+      const includeSourceInput = document.getElementById("includeSource");
+      const addSummaryInput = document.getElementById("addSummary");
+      const emailInput = document.getElementById("userEmail");
+      const creditsInfo = document.getElementById("creditsInfo");
+      const creditsRemaining = document.getElementById("creditsRemaining");
+      const userPlanLabel = document.getElementById("userPlan");
+      const rateLimitInfoBox = document.getElementById("rateLimitInfo");
+      const jobsThisHourEl = document.getElementById("jobsThisHour");
+      const hourlyLimitEl = document.getElementById("hourlyLimit");
+      const errorContainer = document.getElementById("error-container");
+      const progressContainer = statusSection;
+      const resultContainer = resultsSection;
+      const totalVideosBadge = document.getElementById("totalVideosBadge");
+      const totalMinutesBadge = document.getElementById("totalMinutesBadge");
+      const totalUsersBadge = document.getElementById("totalUsersBadge");
+      const liveCounterValue = document.getElementById("liveCounterValue");
+      let liveCounterCurrent = 0;
+      let liveCounterTimer = null;
+      let numberFormatter = new Intl.NumberFormat("de-DE");
+
+      const summaryLangContainer = document.getElementById("summary-lang-selector");
+      const summaryLangSelect = document.getElementById("summary-lang");
+
+      function updateSummaryLanguageVisibility() {
+        if (!summaryLangContainer) {
+          return;
+        }
+        summaryLangContainer.style.display = addSummaryInput && addSummaryInput.checked ? "block" : "none";
+      }
+
+      updateSummaryLanguageVisibility();
+      if (addSummaryInput) {
+        addSummaryInput.addEventListener("change", updateSummaryLanguageVisibility);
+      }
+
+      let currentJobId = null;
+      let jobStartedAt = null;
+      let startTime = 0;
+      let seenStatuses = [];
+
+      function updateHeroStats(payload) {
+        if (!payload) {
+          return;
+        }
+        const totalJobs = Number(payload.total_jobs || 0);
+        const totalMinutes = Number(payload.total_minutes || 0);
+        const totalUsers = Number(payload.total_users || 0);
+
+        if (totalVideosBadge) {
+          const badgeNumber = totalVideosBadge.querySelector('.metric-number');
+          if (badgeNumber) {
+            badgeNumber.textContent = numberFormatter.format(totalJobs);
+          }
+        }
+        if (totalMinutesBadge) {
+          totalMinutesBadge.textContent = numberFormatter.format(Math.round(totalMinutes));
+        }
+        if (totalUsersBadge) {
+          totalUsersBadge.textContent = numberFormatter.format(totalUsers);
+        }
+        startLiveCounter(totalJobs);
+      }
+
+      function startLiveCounter(baseValue) {
+        if (!liveCounterValue) {
+          return;
+        }
+        liveCounterCurrent = Math.max(Number(baseValue) || 0, 0);
+        liveCounterValue.textContent = numberFormatter.format(liveCounterCurrent);
+        if (liveCounterTimer) {
+          clearInterval(liveCounterTimer);
+        }
+        liveCounterTimer = setInterval(() => {
+          liveCounterCurrent += Math.random() < 0.5 ? 0 : 1;
+          liveCounterValue.textContent = numberFormatter.format(liveCounterCurrent);
+        }, 8000);
+      }
+
+      async function fetchPublicStats() {
+        try {
+          const response = await fetch("/api/stats");
+          if (!response.ok) {
+            throw new Error(`Status ${response.status}`);
+          }
+          const payload = await response.json();
+          updateHeroStats(payload);
+        } catch (error) {
+          console.warn("Konnte öffentliche Statistiken nicht laden:", error);
+        }
+      }
+
+      function updateCreditsDisplay(stats) {
+        if (!creditsInfo) {
+          return;
+        }
+        if (!stats) {
+          creditsInfo.style.display = "none";
+          creditsRemaining.textContent = "--";
+          userPlanLabel.textContent = "--";
+          updateRateLimitDisplay(null);
+          return;
+        }
+        const quota = Number(stats.minutes_quota || 0);
+        const used = Number(stats.minutes_used || 0);
+        const remaining = Math.max(0, quota - used);
+        creditsRemaining.textContent = remaining.toFixed(1);
+        const plan = (stats.plan || "free").toString();
+        userPlanLabel.textContent = plan.toUpperCase();
+        creditsInfo.style.display = "block";
+      }
+
+      function updateRateLimitDisplay(info) {
+        if (!rateLimitInfoBox || !jobsThisHourEl || !hourlyLimitEl) {
+          return;
+        }
+        if (!info) {
+          rateLimitInfoBox.style.display = "none";
+          jobsThisHourEl.textContent = "--";
+          hourlyLimitEl.textContent = "--";
+          rateLimitInfoBox.style.color = "#555";
+          return;
+        }
+        rateLimitInfoBox.style.display = "block";
+        const jobs = Number(info.jobs_last_hour || 0);
+        jobsThisHourEl.textContent = jobs.toString();
+        if (info.limit == null) {
+          hourlyLimitEl.textContent = "∞";
+          rateLimitInfoBox.style.color = "#555";
+        } else {
+          hourlyLimitEl.textContent = Number(info.limit).toString();
+          const remaining = Number(info.remaining ?? info.limit);
+          rateLimitInfoBox.style.color = remaining <= 0 ? "#dc2626" : "#555";
+        }
+      }
+
+      async function fetchUserStats(email) {
+        if (!email || !email.includes("@")) {
+          updateCreditsDisplay(null);
+          return null;
+        }
+        try {
+          const response = await fetch(`/api/user/stats?email=${encodeURIComponent(email)}`);
+          if (response.ok) {
+            const stats = await response.json();
+            updateCreditsDisplay(stats);
+            return stats;
+          } else if (response.status === 404) {
+            const fallback = { plan: "free", minutes_used: 0, minutes_quota: 30 };
+            updateCreditsDisplay(fallback);
+            return fallback;
+          } else {
+            updateCreditsDisplay(null);
+            return null;
+          }
+        } catch (e) {
+          console.error('Failed to load user stats', e);
+          updateCreditsDisplay(null);
+          return null;
+        }
+      }
+
+      async function fetchRateLimitInfo(email) {
+        if (!email || !email.includes("@")) {
+          updateRateLimitDisplay(null);
+          return null;
+        }
+        try {
+          const response = await fetch(`/api/user/rate-limit?email=${encodeURIComponent(email)}`);
+          if (response.ok) {
+            const info = await response.json();
+            updateRateLimitDisplay(info);
+            return info;
+          }
+          updateRateLimitDisplay(null);
+          return null;
+        } catch (e) {
+          console.error('Failed to load rate limit info', e);
+          updateRateLimitDisplay(null);
+          return null;
+        }
+      }
+
+      function hideError() {
+        if (!errorContainer) {
+          return;
+        }
+        errorContainer.textContent = "";
+        errorContainer.classList.remove("active");
+      }
+
+      function showError(message) {
+        if (!errorContainer) {
+          return;
+        }
+        errorContainer.textContent = message;
+        errorContainer.classList.add("active");
+      }
+
+      function secondsToReadable(seconds) {
+        if (!seconds || seconds <= 0) return "—";
+        const hrs = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        if (hrs) return `${hrs}h ${mins}m ${secs}s`;
+        if (mins) return `${mins}m ${secs}s`;
+        return `${secs}s`;
+      }
+
+      function addStatusEntry(status, progress) {
+        const stamp = new Date().toLocaleTimeString();
+        const item = document.createElement("div");
+        item.className = "status-item";
+        item.innerHTML = `<span>${stamp}</span><span>${status}${progress != null ? ` — ${Math.round(progress * 100)}%` : ""}</span>`;
+        statusFeed.prepend(item);
+        while (statusFeed.children.length > 12) {
+          statusFeed.removeChild(statusFeed.lastChild);
+        }
+      }
+
+      async function enqueueJob({ formData, jsonPayload, hasFileUpload }) {
+        const response = hasFileUpload
+          ? await fetch("/jobs", {
+              method: "POST",
+              body: formData,
+            })
+          : await fetch("/jobs", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(jsonPayload),
+            });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error((payload && (payload.error || payload.message)) || "Unbekannter Fehler");
+        }
+        return payload.job_id;
+      }
+
+      async function pollJobStatus(jobId) {
+        return pollJob(jobId);
+      }
+
+      async function pollJob(jobId) {
+        while (true) {
+          const response = await fetch(`/jobs/${jobId}`);
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || "Status konnte nicht geladen werden.");
+          }
+
+          updateProgress(data);
+
+          if (data.status === "finished" && data.result) {
+            renderResults(data.result);
+            return;
+          }
+
+          if (data.status === "failed") {
+            throw new Error(data.error || "Job fehlgeschlagen.");
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        }
+      }
+
+      function updateProgress(data) {
+        const progress = typeof data.progress === "number" ? Math.max(0, Math.min(1, data.progress)) : null;
+        const elapsedSeconds = jobStartedAt ? (Date.now() - jobStartedAt) / 1000 : 0;
+        const etaSeconds = progress && progress > 0 ? elapsedSeconds * (1 / progress - 1) : null;
+
+        statusText.textContent = `Status: ${data.status || "unbekannt"}`;
+        statusPercent.textContent = progress != null ? `${Math.round(progress * 100)}%` : "—";
+        statusElapsed.textContent = secondsToReadable(elapsedSeconds);
+        statusEta.textContent = `ETA ${secondsToReadable(etaSeconds)}`;
+        progressBar.style.width = progress != null ? `${Math.round(progress * 100)}%` : "5%";
+
+        const signature = `${data.status}-${progress}`;
+        if (!seenStatuses.includes(signature)) {
+          seenStatuses.push(signature);
+          addStatusEntry(data.status || "unbekannt", progress);
+        }
+      }
+
+      function renderResults(result) {
+        resultsContainer.innerHTML = "";
+        statsContainer.innerHTML = "";
+        resultsSection.classList.remove("hidden");
+        if (progressContainer) {
+          progressContainer.classList.remove("active");
+          progressContainer.classList.add("hidden");
+        }
+        if (resultContainer) {
+          resultContainer.classList.remove("hidden");
+          resultContainer.classList.add("active");
+        }
+        hideError();
+
+        const metadata = result.metadata || {};
+        const downloadBase = result.download_base || `/jobs/${result.job_id}/files`;
+
+        const stats = [
+          { label: "Job-ID", value: result.job_id },
+          { label: "Gerät", value: metadata.device_profile || result.device_profile || "—" },
+          { label: "RTF", value: metadata.rtf ? metadata.rtf.toFixed(3) : "—" },
+          { label: "Audio (s)", value: metadata.audio_seconds ? metadata.audio_seconds.toFixed(2) : "—" },
+          { label: "Transkription (s)", value: metadata.transcription_seconds ? metadata.transcription_seconds.toFixed(2) : "—" },
+          { label: "Gesamt (s)", value: result.total_seconds ? result.total_seconds.toFixed(2) : "—" },
+          { label: "Sprache", value: metadata.detected_language ? `${metadata.detected_language} (p=${metadata.language_probability})` : "—" },
+        ];
+
+        stats.forEach((entry) => {
+          const card = document.createElement("div");
+          card.className = "stat-card";
+          card.innerHTML = `<span class="stat-label">${entry.label}</span><span class="stat-value">${entry.value}</span>`;
+          statsContainer.appendChild(card);
+        });
+
+        if (result.step_times) {
+          const stepsCard = document.createElement("div");
+          stepsCard.className = "stat-card";
+          stepsCard.innerHTML = `<span class="stat-label">Schrittzeiten</span>${Object.entries(result.step_times)
+            .map(([name, seconds]) => `<span class="stat-value">${name}: ${seconds.toFixed(2)}s</span>`)
+            .join("")}`;
+          statsContainer.appendChild(stepsCard);
+        }
+
+        const translations = window.activeTranslations || {};
+        const translate = (key, fallback) => translations[key] || fallback;
+        const summaryFile = result.summary_file || metadata.summary_file;
+        const summaryError = result.summary_error || metadata.summary_error;
+        if (summaryFile || summaryError) {
+          const summaryCard = document.createElement("div");
+          summaryCard.className = "result-card";
+
+          const title = document.createElement("h3");
+          title.textContent = translate("summary_title", "AI-Zusammenfassung");
+          summaryCard.appendChild(title);
+
+          if (summaryFile) {
+            const summaryDiv = document.createElement("div");
+            summaryDiv.className = "summary-text";
+            summaryDiv.textContent = translate("summary_loading", "Zusammenfassung wird geladen...");
+            summaryCard.appendChild(summaryDiv);
+
+            fetch(`${downloadBase}/${summaryFile}`)
+              .then((res) => {
+                if (!res.ok) {
+                  throw new Error(`HTTP ${res.status}`);
+                }
+                return res.text();
+              })
+              .then((text) => {
+                const summaryText = text.trim() || translate("summary_not_available", "Keine Zusammenfassung verf�gbar.");
+                if (typeof marked !== 'undefined') {
+                  summaryDiv.innerHTML = marked.parse(summaryText);
+                } else {
+                  summaryDiv.textContent = summaryText;
+                }
+              })
+              .catch(() => {
+                summaryDiv.textContent = translate("summary_failed", "Fehler beim Laden der Zusammenfassung.");
+              });
+
+            const downloadLink = document.createElement("a");
+            downloadLink.className = "download-link";
+            downloadLink.href = `${downloadBase}/${summaryFile}`;
+            downloadLink.target = "_blank";
+            downloadLink.rel = "noopener";
+            downloadLink.textContent = translate("summary_download", "summary.txt herunterladen");
+            summaryCard.appendChild(downloadLink);
+          }
+
+          if (summaryError) {
+            const errorNote = document.createElement("p");
+            errorNote.className = "summary-error";
+            errorNote.textContent = summaryError;
+            summaryCard.appendChild(errorNote);
+          }
+
+          resultsContainer.appendChild(summaryCard);
+        }
+
+        if (Array.isArray(result.transcripts) && result.transcripts.length) {
+          result.transcripts.forEach((entry) => {
+            const card = document.createElement("div");
+            card.className = "result-card";
+            card.innerHTML = `<h3>Sprache: ${entry.target_language}</h3>`;
+
+            const pre = document.createElement("pre");
+            pre.textContent = entry.text || "";
+            pre.style.whiteSpace = "pre-wrap";
+            card.appendChild(pre);
+
+            const outputs = result.outputs ? result.outputs[entry.target_language] : null;
+            if (outputs) {
+              const downloads = document.createElement("div");
+              downloads.className = "downloads";
+              downloads.innerHTML = `
+                <a class="download-link" href="${downloadBase}/${outputs.txt}" target="_blank">TXT herunterladen</a>
+                ${outputs.srt ? `<a class="download-link" href="${downloadBase}/${outputs.srt}" target="_blank">SRT herunterladen</a>` : ""}
+                ${outputs.vtt ? `<a class="download-link" href="${downloadBase}/${outputs.vtt}" target="_blank">VTT herunterladen</a>` : ""}
+              `;
+              card.appendChild(downloads);
+            }
+
+            resultsContainer.appendChild(card);
+          });
+        }
+      }
+
+      if (emailInput) {
+        emailInput.addEventListener("blur", async () => {
+          const email = emailInput.value.trim();
+          if (!email || !email.includes("@")) {
+            updateCreditsDisplay(null);
+            updateRateLimitDisplay(null);
+            return;
+          }
+          await fetchUserStats(email);
+          await fetchRateLimitInfo(email);
+        });
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        try {
+          hideError();
+          if (resultContainer) {
+            resultContainer.classList.remove("active");
+            resultContainer.classList.add("hidden");
+          }
+          resultsContainer.innerHTML = "";
+          statsContainer.innerHTML = "";
+          if (progressContainer) {
+            progressContainer.classList.remove("hidden");
+            progressContainer.classList.add("active");
+          }
+          resultsSection.classList.add("hidden");
+          statusSection.classList.remove("hidden");
+          statusFeed.innerHTML = "";
+          seenStatuses = [];
+          progressBar.style.width = "0%";
+          statusText.textContent = "Job wird erstellt...";
+          statusPercent.textContent = "0%";
+          statusElapsed.textContent = "0s";
+          statusEta.textContent = "ETA -";
+          if (submitBtn) {
+            submitBtn.disabled = true;
+          }
+
+          const emailValue = emailInput ? emailInput.value.trim() : "";
+          if (!emailValue || !emailValue.includes("@")) {
+            throw new Error("Bitte gib eine gültige Email-Adresse ein.");
+          }
+
+          const hasFileUpload = !!(fileInput && fileInput.files && fileInput.files.length > 0);
+          const formData = hasFileUpload ? new FormData(form) : null;
+          const videoUrl = videoUrlInput ? videoUrlInput.value.trim() : "";
+          const sourceLanguageValue = sourceLanguageInput ? sourceLanguageInput.value.trim() : "";
+          const addSummarySelected = addSummaryInput ? addSummaryInput.checked : false;
+          const summaryLangValue = (summaryLangSelect && addSummarySelected) ? summaryLangSelect.value : "auto";
+          
+          const jsonPayload = hasFileUpload
+            ? null
+            : {
+                whisperTask: whisperTaskInput ? whisperTaskInput.value : "transcribe",
+                profile: profileInput ? profileInput.value : "fast",
+                includeSource: includeSourceInput ? includeSourceInput.checked : true,
+                add_summary: addSummarySelected,
+                addSummary: addSummarySelected,
+              };
+
+          if (jsonPayload) {
+            if (videoUrl) {
+              jsonPayload.video_url = videoUrl;
+              jsonPayload.url = videoUrl;
+            }
+            jsonPayload.sourceLanguage = sourceLanguageValue || null;
+            jsonPayload.email = emailValue;
+            if (addSummarySelected && summaryLangSelect) {
+              jsonPayload.summary_lang = summaryLangSelect.value;
+            }
+          }
+
+          if (formData) {
+            formData.set("email", emailValue);
+            formData.set("add_summary", addSummarySelected ? "1" : "0");
+            if (addSummarySelected) {
+              formData.set("summary_lang", summaryLangValue);
+            }
+          }
+
+          currentJobId = await enqueueJob({
+            formData,
+            jsonPayload,
+            hasFileUpload,
+          });
+          startTime = Date.now();
+          jobStartedAt = startTime;
+          addStatusEntry("Job erstellt", 0);
+
+          await pollJobStatus(currentJobId);
+          addStatusEntry("Job abgeschlossen", 1);
+          await fetchUserStats(emailValue);
+          await fetchRateLimitInfo(emailValue);
+        } catch (e) {
+          const rawMessage = e && e.message ? e.message : "Unbekannter Fehler";
+          let displayMessage = rawMessage;
+          if (rawMessage.includes("Rate limit")) {
+            displayMessage =
+              "Rate-Limit erreicht: Free Accounts können maximal 3 Jobs pro Stunde starten. Bitte warte etwas oder upgrade deinen Plan.";
+          } else if (rawMessage.includes("Too many accounts")) {
+            displayMessage =
+              "Zu viele Accounts von dieser IP-Adresse. Bitte nutze ein bestehendes Konto oder kontaktiere den Support.";
+          }
+          addStatusEntry(displayMessage, null);
+          progressBar.style.width = "100%";
+          statusText.textContent = `Fehler: ${displayMessage}`;
+          statusEta.textContent = "ETA -";
+          showError(displayMessage);
+          if (emailInput && emailInput.value) {
+            await fetchRateLimitInfo(emailInput.value.trim());
+          }
+          if (progressContainer) {
+            progressContainer.classList.remove("active");
+            progressContainer.classList.add("hidden");
+          }
+          if (resultContainer) {
+            resultContainer.classList.remove("active");
+            resultContainer.classList.add("hidden");
+          }
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+          }
+        }
+      });
+    </script>
+    <script>
+      let currentLang = localStorage.getItem('lang') || 'de';
+
+      async function loadTranslations(lang) {
+        try {
+          const response = await fetch(`/translations/${lang}.json`);
+          if (!response.ok) {
+            throw new Error(`Could not load translations: ${response.status}`);
+          }
+          return response.json();
+        } catch (error) {
+          console.error('Translation load failed:', error);
+          return null;
+        }
+      }
+
+      async function applyTranslations(translations) {
+        if (!translations) {
+          return;
+        }
+        window.activeTranslations = translations;
+        document.querySelectorAll('[data-i18n]').forEach((el) => {
+          if (el.tagName === 'OPTION') {
+            return;
+          }
+          const key = el.getAttribute('data-i18n');
+          if (key && translations[key]) {
+            el.textContent = translations[key];
+          }
+        });
+        document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+          const key = el.getAttribute('data-i18n-placeholder');
+          if (key && translations[key]) {
+            el.setAttribute('placeholder', translations[key]);
+          }
+        });
+        document.querySelectorAll('option[data-i18n]').forEach((el) => {
+          const key = el.getAttribute('data-i18n');
+          if (key && translations[key]) {
+            el.textContent = translations[key];
+          }
+        });
+      }
+
+      async function switchLang(lang) {
+        if (!lang) {
+          return;
+        }
+        const translations = await loadTranslations(lang);
+        if (!translations) {
+          return;
+        }
+        localStorage.setItem('lang', lang);
+        await applyTranslations(translations);
+        if (lang !== currentLang) {
+          currentLang = lang;
+          window.location.reload();
+        }
+      }
+
+      window.addEventListener('DOMContentLoaded', async () => {
+        const select = document.getElementById('langSwitch');
+        if (select) {
+          select.value = currentLang;
+          select.addEventListener('change', (event) => {
+            switchLang(event.target.value);
+          });
+        }
+        if (currentLang !== 'de') {
+          const translations = await loadTranslations(currentLang);
+          if (translations) {
+            await applyTranslations(translations);
+          }
+        }
+        fetchPublicStats();
+        setInterval(fetchPublicStats, 60000);
+        window.addEventListener('focus', fetchPublicStats);
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+  </body>
+</html>

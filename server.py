@@ -1,0 +1,593 @@
+from __future__ import annotations
+
+import json
+import logging
+import os
+import sqlite3
+import sys
+import time
+import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from flask import Flask, abort, jsonify, request, send_from_directory
+from werkzeug.utils import secure_filename
+
+from jobs import JOB_STORAGE_ROOT, enqueue_transcription_job, get_job_status
+from logging_config import log_job_error, log_job_progress, log_job_start, setup_logging
+from payment import add_payment_routes
+from users import UserManager
+from video_transcriber import (
+    SUPPORTED_LANGUAGES,
+    get_runtime_device_info,
+    normalize_language_inputs,
+    run_rtf_benchmark,
+    transcribe_video,
+)
+
+# Enhanced logging setup with file output
+setup_logging()
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('app_debug.log')
+    ]
+)
+
+app = Flask(__name__, static_folder="static", static_url_path="")
+add_payment_routes(app)
+logger = logging.getLogger("video_transcriber.server")
+
+logger.info("=" * 80)
+logger.info("🚀 SERVER STARTING UP")
+logger.info("=" * 80)
+logger.info(f"📝 AI_PROVIDER: {os.getenv('AI_PROVIDER', 'not set')}")
+logger.info(f"🔑 ANTHROPIC_API_KEY set: {bool(os.getenv('ANTHROPIC_API_KEY'))}")
+logger.info(f"🔑 OPENAI_API_KEY set: {bool(os.getenv('OPENAI_API_KEY'))}")
+logger.info(f"📊 ANTHROPIC_MODEL: {os.getenv('ANTHROPIC_MODEL', 'not set')}")
+logger.info(f"🌍 SUMMARY_UI_LANG: {os.getenv('SUMMARY_UI_LANG', 'not set')}")
+logger.info("=" * 80)
+
+runtime_info = get_runtime_device_info()
+logger.info(
+    "Runtime hardware -> CUDA: %s, GPU: %s, VRAM(bytes): %s, CPU threads: %s",
+    runtime_info["cuda_available"],
+    runtime_info["device_name"] or "n/a",
+    runtime_info["total_vram_bytes"],
+    runtime_info["cpu_threads"],
+)
+
+JOB_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+
+SUPPORTED_TRANSLATIONS = {"de", "en", "fr", "es", "ar"}
+TRANSLATIONS_DIR = Path("translations")
+_TRANSLATION_CACHE: Dict[str, Dict[str, Any]] = {}
+
+_HEALTH_CACHE: Dict[str, Any] = {"timestamp": 0.0, "payload": None}
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN")
+_CORS_ALLOWED_HEADERS = "Content-Type, Authorization"
+_CORS_ALLOWED_METHODS = "GET, POST, OPTIONS"
+_LOCALHOST_IPS = {"127.0.0.1", "::1"}
+_DISABLE_CREDITS_CHECK = os.getenv("DISABLE_CREDITS_CHECK", "").strip().lower() in {"1", "true", "yes"}
+_DISABLE_CREDITS_FOR_LOCALHOST = (
+    os.getenv("DISABLE_CREDITS_FOR_LOCALHOST", "").strip().lower() in {"1", "true", "yes"}
+)
+
+
+def _parse_languages(payload: Dict[str, Any]) -> Tuple[List[str], bool, str]:
+    languages_input = payload.get("languages") or []
+    if isinstance(languages_input, str):
+        languages_input = [languages_input]
+    if not isinstance(languages_input, list):
+        return [], False, "languages must be a list of language names."
+
+    try:
+        normalized, include_source = normalize_language_inputs(languages_input)
+    except ValueError as exc:
+        return [], False, str(exc)
+
+    return normalized, include_source, ""
+
+
+def _coerce_targets(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    if isinstance(raw, str):
+        value = raw.strip()
+        if not value:
+            return []
+        if value.startswith("[") and value.endswith("]"):
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return [str(item).strip() for item in parsed if str(item).strip()]
+            except json.JSONDecodeError:
+                pass
+        separators = [",", ";"]
+        for sep in separators:
+            if sep in value:
+                return [part.strip() for part in value.split(sep) if part.strip()]
+        return value.split()
+    return []
+
+
+def _coerce_bool(raw: Any, default: bool = False) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _safe_profile(value: str) -> str:
+    return value if value in {"fast", "pro"} else "fast"
+
+
+def _safe_task(value: str) -> str:
+    return value if value in {"translate", "transcribe"} else "translate"
+
+
+def _save_uploaded_file(file_storage) -> Path:
+    filename = secure_filename(file_storage.filename or "")
+    if not filename:
+        filename = f"upload_{uuid.uuid4().hex}"
+    upload_dir = JOB_STORAGE_ROOT / "uploads" / uuid.uuid4().hex
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    destination = upload_dir / filename
+    file_storage.save(destination)
+    return destination
+
+
+def _apply_cors_headers(response):
+    if not FRONTEND_ORIGIN:
+        return response
+    origin = request.headers.get("Origin")
+    if origin == FRONTEND_ORIGIN:
+        response.headers["Access-Control-Allow-Origin"] = FRONTEND_ORIGIN
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        vary = response.headers.get("Vary")
+        if vary:
+            if "Origin" not in vary:
+                response.headers["Vary"] = f"{vary}, Origin"
+        else:
+            response.headers["Vary"] = "Origin"
+    return response
+
+
+@app.before_request
+def handle_preflight() -> Optional[Any]:
+    if request.method == "OPTIONS":
+        response = app.make_response(("", 204))
+        response.headers["Access-Control-Allow-Methods"] = _CORS_ALLOWED_METHODS
+        response.headers["Access-Control-Allow-Headers"] = _CORS_ALLOWED_HEADERS
+        response.headers["Access-Control-Max-Age"] = "86400"
+        return _apply_cors_headers(response)
+    return None
+
+
+@app.after_request
+def add_cors_headers(response):
+    response = _apply_cors_headers(response)
+    if request.method == "OPTIONS":
+        response.headers.setdefault("Access-Control-Allow-Methods", _CORS_ALLOWED_METHODS)
+        response.headers.setdefault("Access-Control-Allow-Headers", _CORS_ALLOWED_HEADERS)
+    return response
+
+
+@app.route("/")
+def index() -> Any:
+    return app.send_static_file("index.html")
+
+
+def _compute_health_payload() -> Dict[str, Any]:
+    bench = run_rtf_benchmark(duration=10.0, task="transcribe")
+    device_info = get_runtime_device_info()
+    return {
+        "gpu": bool(device_info["cuda_available"]),
+        "device_name": device_info["device_name"] or ("cuda" if device_info["cuda_available"] else "cpu"),
+        "rtf_10s": round(bench["rtf"], 4),
+        "transcription_seconds": round(bench["elapsed_seconds"], 3),
+        "audio_seconds": bench["audio_seconds"],
+        "device_profile": bench["device_profile"],
+    }
+
+
+def _get_health_payload() -> Dict[str, Any]:
+    now = time.time()
+    cached = _HEALTH_CACHE["payload"]
+    if cached and (now - _HEALTH_CACHE["timestamp"]) < 300:
+        return cached
+    payload = _compute_health_payload()
+    _HEALTH_CACHE["payload"] = payload
+    _HEALTH_CACHE["timestamp"] = now
+    return payload
+
+
+@app.route("/health", methods=["GET"])
+def api_health() -> Any:
+    try:
+        payload = _get_health_payload()
+    except Exception as exc:  # pragma: no cover - safeguard
+        log_job_error("health", exc)
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(payload)
+
+
+def _fetch_public_stats() -> Dict[str, Any]:
+    payload = {"total_jobs": 0, "total_minutes": 0.0, "total_users": 0}
+    try:
+        with sqlite3.connect("users.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM usage_history")
+            row = cursor.fetchone()
+            payload["total_jobs"] = int(row[0]) if row and row[0] else 0
+
+            cursor.execute("SELECT COALESCE(SUM(video_duration), 0) FROM usage_history")
+            row = cursor.fetchone()
+            payload["total_minutes"] = float(row[0]) if row and row[0] is not None else 0.0
+
+            cursor.execute("SELECT COUNT(*) FROM users")
+            row = cursor.fetchone()
+            payload["total_users"] = int(row[0]) if row and row[0] else 0
+    except sqlite3.Error as exc:  # pragma: no cover - defensive
+        logger.warning("Failed to load public stats: %s", exc)
+    return payload
+
+
+def _detect_language_from_headers() -> str:
+    header = request.headers.get("Accept-Language", "")
+    for part in header.split(","):
+        code = part.split(";")[0].strip().lower()
+        if not code:
+            continue
+        code = code.split("-")[0]
+        if code in SUPPORTED_TRANSLATIONS:
+            return code
+    return "de"
+
+
+def _load_translation_payload(lang: str) -> Dict[str, Any]:
+    if lang in _TRANSLATION_CACHE:
+        return _TRANSLATION_CACHE[lang]
+    candidate = TRANSLATIONS_DIR / f"{lang}.json"
+    if not candidate.is_file():
+        raise FileNotFoundError(f"Translation file not found for {lang}")
+    with candidate.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    _TRANSLATION_CACHE[lang] = data
+    return data
+
+
+@app.route("/api/translations/<lang>", methods=["GET"])
+def api_translations(lang: str) -> Any:
+    requested = (lang or "").lower()
+    if requested == "auto":
+        requested = _detect_language_from_headers()
+    if requested not in SUPPORTED_TRANSLATIONS:
+        requested = _detect_language_from_headers()
+    if requested not in SUPPORTED_TRANSLATIONS:
+        requested = "de"
+    try:
+        payload = _load_translation_payload(requested)
+    except (FileNotFoundError, json.JSONDecodeError):
+        requested = "de"
+        payload = _load_translation_payload(requested)
+    return jsonify({"lang": requested, "strings": payload})
+
+
+@app.route("/translations/<lang>.json", methods=["GET"])
+def get_translation_file(lang: str):
+    requested = (lang or "").lower()
+    if requested not in {"de", "en"}:
+        requested = "de"
+    return send_from_directory("static/translations", f"{requested}.json")
+
+
+@app.route("/api/stats", methods=["GET"])
+def get_public_stats() -> Any:
+    return jsonify(_fetch_public_stats())
+
+
+@app.route("/jobs/<job_id>/files/<path:filename>", methods=["GET"])
+def get_job_file(job_id: str, filename: str) -> Any:
+    base_dir = (JOB_STORAGE_ROOT / job_id).resolve()
+    target = (base_dir / filename).resolve()
+    if not base_dir.exists() or not target.exists() or not target.is_file() or base_dir not in target.parents:
+        abort(404)
+    return send_from_directory(base_dir, filename, as_attachment=False)
+
+
+@app.route("/jobs", methods=["POST"])
+def create_job() -> Any:
+    logger.info("=" * 80)
+    logger.info("📥 NEW JOB REQUEST RECEIVED")
+    logger.info("=" * 80)
+    
+    upload_path: Optional[Path] = None
+    video_url: Optional[str] = None
+    targets: List[str] = []
+    include_source_flag = True
+    profile = "fast"
+    source_language: Optional[str] = None
+    whisper_task = "transcribe"
+
+    email: Optional[str] = None
+    add_summary = False
+    data: Dict[str, Any] = {}
+
+    try:
+        logger.info(f"📋 Content-Type: {request.content_type}")
+        logger.info(f"📍 Remote address: {request.remote_addr}")
+        
+        if request.content_type and request.content_type.startswith("multipart/form-data"):
+            file = request.files.get("file")
+            if file and file.filename:
+                upload_path = _save_uploaded_file(file)
+
+            form = request.form
+            video_url = (form.get("video_url") or form.get("url") or "").strip() or None
+            targets_input = form.get("targets") or form.get("languages")
+            targets = _coerce_targets(targets_input)
+            include_source_flag = _coerce_bool(form.get("includeSource"), True)
+            profile = _safe_profile((form.get("profile") or "fast").lower())
+            source_language = (form.get("sourceLanguage") or "").strip() or None
+            whisper_task = _safe_task((form.get("whisperTask") or "transcribe").lower())
+            email = (form.get("email") or form.get("userEmail") or form.get("user_email") or "").strip() or None
+            add_summary = _coerce_bool(form.get("add_summary") or form.get("addSummary"), False)
+        else:
+            data = request.get_json(force=True, silent=True) or {}
+            video_url = (data.get("video_url") or data.get("url") or "").strip() or None
+            targets = _coerce_targets(data.get("targets") or data.get("languages"))
+            include_source_flag = _coerce_bool(data.get("includeSource"), True)
+            profile = _safe_profile((data.get("profile") or "fast").lower())
+            source_language = (data.get("sourceLanguage") or "").strip() or None
+            whisper_task = _safe_task((data.get("whisperTask") or "transcribe").lower())
+            email = (data.get("email") or data.get("userEmail") or data.get("user_email") or "").strip() or None
+            add_summary = _coerce_bool(
+                data.get("add_summary") or data.get("addSummary") or data.get("addSummarySelected"), False
+            )
+
+        if not video_url and not upload_path:
+            logger.warning("❌ No video URL or upload provided")
+            return jsonify({"error": "Bitte gib eine Video-URL an oder lade eine Datei hoch."}), 400
+
+        if not email:
+            logger.warning("❌ No email provided")
+            return jsonify({"error": "Email required"}), 400
+
+        summary_lang = (
+            (request.form.get("summary_lang") if (request.content_type and request.content_type.startswith("multipart/form-data")) else None)
+            or (data.get("summary_lang") if data else None)
+            or os.getenv("SUMMARY_UI_LANG", "auto")
+        )
+        
+        logger.info("=" * 80)
+        logger.info("📊 JOB REQUEST DETAILS:")
+        logger.info(f"  📧 Email: {email}")
+        logger.info(f"  🎥 Video URL: {video_url}")
+        logger.info(f"  📁 Upload: {bool(upload_path)}")
+        logger.info(f"  🎯 Targets: {targets}")
+        logger.info(f"  🤖 Add Summary: {add_summary}")
+        logger.info(f"  🌍 Summary Lang: {summary_lang}")
+        logger.info(f"  ⚙️ Profile: {profile}")
+        logger.info(f"  📝 Whisper Task: {whisper_task}")
+        logger.info("=" * 80)
+
+        ip_address = request.remote_addr or "unknown"
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            ip_address = forwarded_for.split(",")[0].strip() or ip_address
+
+        if not UserManager.check_ip_abuse(email, ip_address):
+            logger.warning(
+                "IP abuse detected: email=%s ip=%s", email, ip_address
+            )
+            return jsonify({"error": "Too many accounts from this IP"}), 403
+
+        _, include_source_from_list, error = _parse_languages({"languages": targets})
+        if error:
+            return jsonify({"error": error}), 400
+        include_source_final = include_source_flag or include_source_from_list
+
+        user = UserManager.get_or_create_user(email)
+
+        if not UserManager.check_rate_limit(email):
+            info = UserManager.get_rate_limit_info(email)
+            logger.warning(
+                "Rate limit exceeded: email=%s ip=%s info=%s", email, ip_address, info
+            )
+            return jsonify({"error": "Rate limit exceeded", "rate_limit": info}), 429
+
+        estimated_minutes = 5.0
+        skip_credit_check = _DISABLE_CREDITS_CHECK or (
+            _DISABLE_CREDITS_FOR_LOCALHOST and ip_address in _LOCALHOST_IPS
+        )
+        if skip_credit_check:
+            logger.info("Skipping quota check for email=%s ip=%s", email, ip_address)
+        if not skip_credit_check and not UserManager.check_quota(email, estimated_minutes):
+            stats = UserManager.get_user_stats(email) or {}
+            return (
+                jsonify(
+                    {
+                        "error": "Insufficient credits",
+                        "used": stats.get("minutes_used", 0),
+                        "quota": stats.get("minutes_quota", user.get("minutes_quota") if user else 0),
+                        "upgrade_url": "/pricing.html",
+                    }
+                ),
+                402,
+            )
+
+        UserManager.register_ip_usage(email, ip_address)
+        logger.info("IP usage recorded: email=%s ip=%s", email, ip_address)
+
+        logger.info("🎬 Enqueuing transcription job...")
+        
+        job = enqueue_transcription_job(
+            video_url=video_url,
+            targets=targets,
+            profile=profile,
+            include_source=include_source_final,
+            source_language=source_language,
+            whisper_task=whisper_task,
+            upload_path=str(upload_path) if upload_path else None,
+            user_email=email,
+            add_summary=add_summary,
+            summary_lang=summary_lang,
+        )
+
+        logger.info("✅ Job enqueued successfully!")
+        logger.info(
+            "Job details: id=%s url=%s upload=%s profile=%s task=%s targets=%s include_source=%s add_summary=%s",
+            job.id,
+            video_url,
+            bool(upload_path),
+            profile,
+            whisper_task,
+            targets,
+            include_source_final,
+            add_summary,
+        )
+        log_job_start(job.id, video_url, profile, "queued")
+        log_job_progress(job.id, "queued", 0.0, detail="job enqueued via API")
+    except ValueError as exc:
+        logger.error("=" * 80)
+        logger.error("❌ VALIDATION ERROR")
+        logger.error("=" * 80)
+        logger.error(f"Error: {exc}")
+        logger.exception("Full traceback:")
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        logger.error("=" * 80)
+        logger.error("❌ FAILED TO ENQUEUE JOB")
+        logger.error("=" * 80)
+        logger.error(f"Error type: {type(exc).__name__}")
+        logger.error(f"Error message: {str(exc)}")
+        logger.exception("Full traceback:")
+        log_job_error("enqueue", exc)
+        return jsonify({"error": str(exc)}), 500
+
+    logger.info("=" * 80)
+    logger.info(f"✅ JOB CREATED: {job.id}")
+    logger.info("=" * 80)
+    return jsonify({"job_id": job.id}), 202
+
+
+@app.route("/jobs/<job_id>", methods=["GET"])
+def get_job(job_id: str) -> Any:
+    try:
+        payload = get_job_status(job_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+    return jsonify(payload)
+
+
+@app.route("/api/user/stats", methods=["GET"])
+def api_user_stats() -> Any:
+    email = (request.args.get("email") or "").strip()
+    if not email:
+        return jsonify({"error": "Email required"}), 400
+
+    stats = UserManager.get_user_stats(email)
+    if not stats:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify(stats)
+
+
+@app.route("/api/user/rate-limit", methods=["GET"])
+def api_user_rate_limit() -> Any:
+    email = (request.args.get("email") or "").strip()
+    if not email:
+        return jsonify({"error": "Email required"}), 400
+    info = UserManager.get_rate_limit_info(email)
+    return jsonify(info)
+
+
+@app.route("/api/admin/ip-stats", methods=["GET"])
+def api_admin_ip_stats() -> Any:
+    ip_address = (request.args.get("ip") or "").strip()
+    if not ip_address:
+        return jsonify({"error": "IP required"}), 400
+    return jsonify(UserManager.get_ip_stats(ip_address))
+
+
+@app.route("/api/transcribe", methods=["POST"])
+def api_transcribe() -> Any:
+    data = request.get_json(force=True, silent=True) or {}
+
+    url = (data.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "Bitte gib einen gueltigen YouTube- oder Facebook-Link an."}), 400
+
+    languages, include_source_from_list, error = _parse_languages(data)
+    if error:
+        return jsonify({"error": error}), 400
+    languages = []
+
+    include_source = bool(data.get("includeSource", False)) or include_source_from_list
+    whisper_task = (data.get("whisperTask") or "translate").lower()
+    if whisper_task not in {"translate", "transcribe"}:
+        return jsonify({"error": "whisperTask muss 'translate' oder 'transcribe' sein."}), 400
+
+    model_size = (data.get("modelSize") or "small").lower()
+    device = (data.get("device") or "cpu").lower()
+    compute_type = (data.get("computeType") or "int8").lower()
+
+    try:
+        beam_size = int(data.get("beamSize", 5))
+    except (TypeError, ValueError):
+        return jsonify({"error": "beamSize muss eine ganze Zahl sein."}), 400
+
+    source_language = data.get("sourceLanguage")
+    if source_language is not None:
+        source_language = source_language.strip() or None
+
+    try:
+        metadata, base_result, translations, include_source_flag = transcribe_video(
+            url=url,
+            languages=languages,
+            include_source=include_source,
+            whisper_task=whisper_task,
+            model_size=model_size,
+            device=device,
+            compute_type=compute_type,
+            beam_size=beam_size,
+            source_language=source_language,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:  # pragma: no cover - safeguard
+        log_job_error("api_transcribe", exc)
+        return jsonify({"error": f"Unerwarteter Fehler: {exc}"}), 500
+
+    transcript_payload: List[Dict[str, str]] = []
+    if include_source_flag:
+        transcript_payload.append(base_result.__dict__)
+    transcript_payload.extend(result.__dict__ for result in translations)
+
+    return jsonify(
+        {
+            "metadata": metadata,
+            "transcripts": transcript_payload,
+            "supportedLanguages": sorted(SUPPORTED_LANGUAGES),
+        }
+    )
+
+
+@app.route("/api/healthz", methods=["GET"])
+def healthz() -> Any:
+    return jsonify({"status": "ok"})
+
+
+@app.route("/success", methods=["GET"])
+def checkout_success() -> Any:
+    return jsonify({"message": "Payment successful"})
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    app.run(debug=True)
