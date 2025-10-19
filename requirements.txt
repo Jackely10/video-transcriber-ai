@@ -9,3 +9,5 @@ flask-cors==4.0.0
 requests==2.31.0
 gunicorn==21.2.0
 rq==1.15.1
+faster-whisper==0.10.0
+numpy<2
