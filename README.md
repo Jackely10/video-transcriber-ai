@@ -104,6 +104,7 @@ Dieses Repository enthaelt eine `Procfile`- und `nixpacks.toml`-Konfiguration, d
    - `PIP_PREFER_BINARY=1` (fuer Wheel-Prioritaet).
    - Optional: `WHISPER_DEVICE=cpu`, `WHISPER_CPU_MODEL_ID=tiny` fuer ressourcenschonende Modelle.
    - Optionaler Zugriffsschutz: `BASIC_AUTH_USERNAME`, `BASIC_AUTH_PASSWORD` aktivieren HTTP Basic Auth fuer alle Routen ausser Health/Static.
+   - In Railway koennen diese Werte zentral als Shared Vars gepflegt werden, damit Web- und Worker-Service automatisch dieselben Einstellungen erhalten.
 3. **Services anlegen:** Railway legt anhand der `Procfile` zwei Prozesse an:
    - `web`: `gunicorn app:app --bind 0.0.0.0:$PORT`.
    - `worker`: `rq worker default --url $REDIS_URL`.
