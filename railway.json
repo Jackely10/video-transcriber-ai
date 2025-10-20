@@ -17,7 +17,9 @@
         "builder": "NIXPACKS"
       },
       "deploy": {
-        "startCommand": "gunicorn app:app --bind 0.0.0.0:$PORT"
+        "startCommand": "gunicorn app:app --bind 0.0.0.0:$PORT",
+        "numReplicas": 1,
+        "restartPolicyType": "ON_FAILURE"
       }
     },
     {
@@ -27,7 +29,9 @@
         "builder": "NIXPACKS"
       },
       "deploy": {
-        "startCommand": "python worker.py"
+        "startCommand": "python worker.py",
+        "numReplicas": 1,
+        "restartPolicyType": "ON_FAILURE"
       }
     }
   ]
