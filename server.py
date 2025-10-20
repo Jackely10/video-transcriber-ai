@@ -10,10 +10,17 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import redis
 from flask import Flask, Response, abort, jsonify, request, send_from_directory
+from rq import Queue
 from werkzeug.utils import secure_filename
 
-from jobs import JOB_STORAGE_ROOT, enqueue_transcription_job, get_job_status
+from jobs import (
+    JOB_STORAGE_ROOT,
+    enqueue_ping_job,
+    enqueue_transcription_job,
+    get_job_status,
+)
 from logging_config import log_job_error, log_job_progress, log_job_start, setup_logging
 from payment import add_payment_routes
 from users import UserManager
@@ -42,7 +49,7 @@ logger = logging.getLogger("video_transcriber.server")
 
 _BASIC_AUTH_USER_ENV = "BASIC_AUTH_USERNAME"
 _BASIC_AUTH_PASS_ENV = "BASIC_AUTH_PASSWORD"
-_UNPROTECTED_ENDPOINTS = {"api_health", "healthz", "static"}
+_UNPROTECTED_ENDPOINTS = {"api_health", "healthz", "healthz_root", "healthz_legacy", "static"}
 _UNPROTECTED_PREFIXES = ("/health", "/api/health", "/static")
 
 
@@ -71,6 +78,43 @@ def enforce_basic_auth() -> Optional[Response]:
         return None
 
     return Response("", 401, {"WWW-Authenticate": 'Basic realm="Login Required"'})
+
+
+def _get_queue_name() -> str:
+    return os.getenv("RQ_QUEUE", "default")
+
+
+def _get_redis_connection() -> Optional[redis.Redis]:
+    redis_url = os.getenv("REDIS_URL")
+    if not redis_url:
+        return None
+    try:
+        return redis.from_url(redis_url)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning("Redis connection error: %s", exc)
+        return None
+
+
+def _build_health_payload() -> Dict[str, Any]:
+    redis_ok = False
+    queue_len = 0
+    connection = _get_redis_connection()
+    if connection is not None:
+        try:
+            redis_ok = bool(connection.ping())
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning("Redis ping failed: %s", exc)
+        else:
+            try:
+                queue = Queue(_get_queue_name(), connection=connection)
+                queue_len = queue.count
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning("Queue length lookup failed: %s", exc)
+    return {
+        "status": "ok",
+        "redis": redis_ok,
+        "worker_queue_len": queue_len,
+    }
 
 logger.info("=" * 80)
 logger.info("🚀 SERVER STARTING UP")
@@ -610,9 +654,33 @@ def api_transcribe() -> Any:
     )
 
 
+@app.route("/healthz", methods=["GET"])
+def healthz_root() -> Any:
+    return jsonify(_build_health_payload())
+
+
 @app.route("/api/healthz", methods=["GET"])
-def healthz() -> Any:
-    return jsonify({"status": "ok"})
+def healthz_legacy() -> Any:
+    return jsonify(_build_health_payload())
+
+
+@app.route("/selftest", methods=["POST"])
+def api_selftest() -> Any:
+    try:
+        job_id = enqueue_ping_job()
+    except Exception as exc:  # pragma: no cover - defensive logging
+        log_job_error("selftest", exc)
+        return jsonify({"error": "Failed to enqueue self-test job"}), 500
+    return jsonify({"job_id": job_id}), 202
+
+
+@app.route("/job/<job_id>", methods=["GET"])
+def api_job_status(job_id: str) -> Any:
+    try:
+        status = get_job_status(job_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+    return jsonify(status)
 
 
 @app.route("/success", methods=["GET"])

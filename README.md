@@ -84,6 +84,9 @@ Dann `http://127.0.0.1:5000/` im Browser oeffnen. Die Seite ermoeglicht:
   Antwort: `{"job_id": "<id>"}` mit Status `202`.
 - `GET /jobs/<id>` - liefert Status, Fortschritt, Meta-Daten, RTF und Ausgabe-Pfade.
 - `GET /jobs/<id>/files/<path>` - stellt erzeugte TXT/SRT/VTT-Dateien bereit.
+- `GET /healthz` - liefert `{status, redis, worker_queue_len}` und ist fuer Healthchecks ohne Authentifizierung gedacht.
+- `POST /selftest` - enqueued einen internen `ping`-Job auf der Default-Queue (Basic Auth erforderlich, falls gesetzt) und liefert `{"job_id": ...}`.
+- `GET /job/<id>` - gibt den Job-Status sowie ggf. das Ergebnis zurueck; meldet `404`, wenn die ID unbekannt ist.
 
 Schnelltest per `curl`:
 
@@ -92,6 +95,15 @@ JOB=$(curl -s -X POST http://127.0.0.1:5000/jobs \
   -H "Content-Type: application/json" \
   -d '{"video_url":"https://www.youtube.com/watch?v=VIDEO_ID","whisperTask":"translate"}' | jq -r .job_id)
 curl http://127.0.0.1:5000/jobs/$JOB
+
+# Healthcheck ohne Auth
+curl http://127.0.0.1:5000/healthz
+
+# Selftest mit Basic Auth
+curl -u user:pass -X POST http://127.0.0.1:5000/selftest
+
+# Job-Status
+curl http://127.0.0.1:5000/job/$JOB
 ```
 
 ## Deploy zu Railway

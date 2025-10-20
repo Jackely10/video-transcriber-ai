@@ -39,7 +39,7 @@ from ai_summary import SummaryGenerationError, generate_summary
 LOGGER = setup_logging()
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-QUEUE_NAME = os.getenv("RQ_QUEUE", "transcriber")
+QUEUE_NAME = os.getenv("RQ_QUEUE", "default")
 JOB_STORAGE_ROOT = Path(os.getenv("JOB_STORAGE_ROOT", Path.cwd() / "jobs"))
 
 redis_connection = redis.Redis.from_url(REDIS_URL)
@@ -52,6 +52,10 @@ STEP_WEIGHTS: Dict[str, float] = {
     "translate": 0.2,
     "export": 0.1,
 }
+
+
+def ping_job() -> str:
+    return "pong"
 
 
 def _ensure_storage_root() -> None:
@@ -489,6 +493,11 @@ def process_job(
         _update_job_meta("failed", progress_accumulator, {"error": str(exc), "status_detail": "job failed"})
         log_job_error(job_id, exc)
         raise
+
+
+def enqueue_ping_job() -> str:
+    job = job_queue.enqueue(ping_job)
+    return job.id
 
 
 def enqueue_transcription_job(
