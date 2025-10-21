@@ -116,6 +116,7 @@ Dieses Repository bringt `Procfile` und `nixpacks.toml` mit, sodass Railway via 
    - `NIXPACKS_CONFIG_PATH=./nixpacks.toml`
    - `NIXPACKS_USE_NIX=1`
    - `PIP_PREFER_BINARY=1`
+   - Optional: `WHISPER_DEVICE=cpu`, `WHISPER_CPU_MODEL_ID=tiny`
    - Optional (nur Web-Service): `BASIC_AUTH_USERNAME`, `BASIC_AUTH_PASSWORD`
 3. **Services pruefen:** Railway legt ueber die `Procfile` zwei Prozesse an:
    - `web`: `gunicorn app:app --bind 0.0.0.0:$PORT`
@@ -163,4 +164,3 @@ Dieses Repository bringt `Procfile` und `nixpacks.toml` mit, sodass Railway via 
 - Lass Server und Worker nach Moeglichkeit laufen, damit Whisper-Modelle im Cache bleiben und Folge-Jobs schneller sind.
 - Verwende `--whisper-task transcribe` (und tippe `source`), wenn du das Original ohne Whisper-Translate moechtest.
 - Falls `python` nicht aufrufbar ist, installiere es von https://www.python.org/downloads/ und oeffne eine neue Shell.
-
