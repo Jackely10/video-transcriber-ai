@@ -1,2 +1,2 @@
 web: gunicorn app:app --bind 0.0.0.0:$PORT
-worker: python worker.py
+worker: rq worker -u $REDIS_URL default

@@ -111,20 +111,22 @@ curl http://127.0.0.1:5000/job/$JOB
 Dieses Repository bringt `Procfile` und `nixpacks.toml` mit, sodass Railway via Nixpacks automatisch Web- und Worker-Prozesse erzeugt.
 
 1. **Projekt importieren:** In Railway auf `New Project -> Deploy from GitHub` gehen und dieses Repo auswaehlen. Die Standard-Erkennung sollte automatisch die `nixpacks.toml` nutzen (Python 3.11, ffmpeg via nix).
-2. **Variablen setzen (Web & Worker):**
-   - `REDIS_URL` (z. B. Upstash mit `rediss://`)
-   - `PIP_PREFER_BINARY=1`
-   - `NIXPACKS_USE_NIX=1`
+2. **Variablen setzen:** Lege in Railway Shared Vars an, damit Web & Worker identisch konfiguriert werden:
+   - `REDIS_URL` (Upstash: `rediss://...`, Railway-Redis: `redis://.../0`)
    - `NIXPACKS_CONFIG_PATH=./nixpacks.toml`
-   - Optional: `WHISPER_DEVICE=cpu`, `WHISPER_CPU_MODEL_ID=tiny`
-   - Optional: `BASIC_AUTH_USERNAME`, `BASIC_AUTH_PASSWORD`
-   - Als Shared Vars gepflegt erhalten Web- und Worker-Service automatisch identische Einstellungen.
+   - `NIXPACKS_USE_NIX=1`
+   - `PIP_PREFER_BINARY=1`
+   - Optional (nur Web-Service): `BASIC_AUTH_USERNAME`, `BASIC_AUTH_PASSWORD`
 3. **Services pruefen:** Railway legt ueber die `Procfile` zwei Prozesse an:
    - `web`: `gunicorn app:app --bind 0.0.0.0:$PORT`
-   - `worker`: `rq worker default --url $REDIS_URL`
+   - `worker`: `rq worker -u $REDIS_URL default`
 4. **Redis bereitstellen:** In Railway `Add Plugin -> Redis` waehlen und die dortige URL als `REDIS_URL` eintragen.
 5. **Rebuild ohne Cache:** Im Dashboard `Settings -> Deployments -> Clear Build Cache & Deploy` fuer Web und Worker ausloesen, damit Nixpacks mit der neuen Konfiguration baut. Im Log darf kein `apt-get install ffmpeg` mehr auftauchen.
-6. **Smoke-Test:** Nach erfolgreichem Deploy `/healthz` aufrufen, eine kurze Transkription anstossen (Web-Log zeigt Queueing, Worker-Log die Abarbeitung).
+6. **Smoke-Test:** `curl -sSf https://<WEB_URL>/healthz | jq` prueft den Healthcheck ohne Auth. Falls Basic Auth aktiv ist:
+   ```bash
+   curl -sSf -u USER:PASS -X POST https://<WEB_URL>/selftest | jq
+   curl -sSf -u USER:PASS https://<WEB_URL>/job/<JOB_ID> | jq
+   ```
 
 ## Health Check & Benchmark
 
