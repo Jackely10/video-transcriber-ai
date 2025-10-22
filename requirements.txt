@@ -2,8 +2,11 @@ flask==3.0.0
 gunicorn==21.2.0
 redis==5.0.1
 rq==1.15.1
+
+yt-dlp==2024.08.06
+pydub==0.25.1
+
 faster-whisper==1.0.1
 ctranslate2==4.4.0
 numpy<2
-pydub
-yt-dlp
+
