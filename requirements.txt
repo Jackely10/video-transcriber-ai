@@ -5,7 +5,5 @@ rq>=1.15
 faster-whisper>=1.0
 ctranslate2>=3.24
 numpy<2
-ffmpeg-python>=0.2      # optional; CLI kommt über Nix
+ffmpeg-python>=0.2      # optional; CLI kommt ueber Nix
 yt-dlp>=2024.0          # optional, falls genutzt
-
-
