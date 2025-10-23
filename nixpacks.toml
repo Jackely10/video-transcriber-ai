@@ -6,8 +6,3 @@ cmds = [
   "python -m pip install --upgrade pip setuptools wheel",
   "PIP_PREFER_BINARY=1 pip install -r requirements.txt"
 ]
-
-[start]
-cmd = "gunicorn server:app --bind 0.0.0.0:$PORT"
-
-
