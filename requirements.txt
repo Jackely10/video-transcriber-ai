@@ -1,12 +1,11 @@
-flask==3.0.0
-gunicorn==21.2.0
-redis==5.0.1
-rq==1.15.1
-
-yt-dlp==2024.08.06
-pydub==0.25.1
-
-faster-whisper==1.0.1
-ctranslate2==4.4.0
+Flask>=2.3
+gunicorn>=21
+redis>=4.6
+rq>=1.15
+faster-whisper>=1.0
+ctranslate2>=3.24
 numpy<2
+ffmpeg-python>=0.2      # optional; CLI kommt über Nix
+yt-dlp>=2024.0          # optional, falls genutzt
+
 
