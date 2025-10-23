@@ -49,8 +49,8 @@ logger = logging.getLogger("video_transcriber.server")
 
 _BASIC_AUTH_USER_ENV = "BASIC_AUTH_USERNAME"
 _BASIC_AUTH_PASS_ENV = "BASIC_AUTH_PASSWORD"
-_UNPROTECTED_ENDPOINTS = {"api_health", "healthz", "healthz_root", "healthz_legacy", "static"}
-_UNPROTECTED_PREFIXES = ("/health", "/api/health", "/static")
+_UNPROTECTED_ENDPOINTS = {"api_health", "healthz", "healthz_legacy", "static"}
+_UNPROTECTED_PREFIXES = ("/health", "/api/health", "/static", "/_static")
 
 
 def _basic_auth_enabled() -> bool:
@@ -655,8 +655,8 @@ def api_transcribe() -> Any:
 
 
 @app.route("/healthz", methods=["GET"])
-def healthz_root() -> Any:
-    return jsonify(_build_health_payload())
+def healthz() -> Any:
+    return jsonify({"ok": True})
 
 
 @app.route("/api/healthz", methods=["GET"])
