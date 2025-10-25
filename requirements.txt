@@ -8,4 +8,5 @@ numpy<2
 ffmpeg-python>=0.2      # optional; CLI kommt ueber Nix
 yt-dlp>=2024.0          # optional, falls genutzt
 python-dotenv>=1.0.1
+openai>=1.0.0
 
