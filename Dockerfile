@@ -1,4 +1,7 @@
-FROM python:3.11-slim
+FROM python:3.11
+
+WORKDIR /app
+
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libavcodec-dev \
@@ -10,12 +13,12 @@ RUN apt-get update && apt-get install -y \
     libswresample-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
-# Vor dem pip install
 
-```
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
-**Alternative Lösungen:**
+COPY . .
 
-1. **Verwenden Sie vorgefertigte Wheels**: Ändern Sie in `requirements.txt`:
-```
-   av>=11.0.0
+EXPOSE 5000
+
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
