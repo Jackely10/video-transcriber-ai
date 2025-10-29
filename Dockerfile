@@ -1,6 +1,4 @@
 FROM python:3.11-slim
-
-# Vor dem pip install
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libavcodec-dev \
@@ -12,6 +10,8 @@ RUN apt-get update && apt-get install -y \
     libswresample-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
+# Vor dem pip install
+
 ```
 
 **Alternative Lösungen:**
