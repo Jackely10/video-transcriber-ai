@@ -377,7 +377,9 @@ def process_job(
                 LOGGER.info(f"  📝 Preview: {summary_text[:200]}...")
                 LOGGER.info("=" * 80)
                 
-                summary_path = job_dir / "summary.txt"
+                lang_dir = job_dir / base_language
+                lang_dir.mkdir(parents=True, exist_ok=True)
+                summary_path = lang_dir / "summary.txt"
                 summary_path.write_text(summary_text.strip() + "\n", encoding="utf-8")
                 summary_rel_path = summary_path.relative_to(job_dir).as_posix()
                 
