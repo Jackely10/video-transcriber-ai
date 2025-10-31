@@ -1154,6 +1154,7 @@
         const translations = window.activeTranslations || {};
         const translate = (key, fallback) => translations[key] || fallback;
         const summaryFile = result.summary_file || metadata.summary_file;
+        const summaryPath = summaryFile && summaryFile.includes('/') ? summaryFile : summaryFile;
         const summaryError = result.summary_error || metadata.summary_error;
         
         if (summaryFile || summaryError) {
