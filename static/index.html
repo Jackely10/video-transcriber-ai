@@ -322,7 +322,7 @@
         gap: 12px;
       }
 
-      \.option-card h3 {
+      .option-card h3 {
         font-size: 0.95rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -563,41 +563,6 @@
       #results-section.active {
         display: block;
       }
-
-      /* AI-Summary Tabellen */
-      .summary-text table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 20px 0;
-        background: rgba(255, 255, 255, 0.03);
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-      }
-
-      .summary-text table th {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 15px;
-        text-align: left;
-        font-weight: 600;
-      }
-
-      .summary-text table td {
-        padding: 15px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        color: #e0e0e0;
-      }
-
-      .summary-text table tr:hover {
-        background: rgba(102, 126, 234, 0.15);
-      }
-
-      .summary-text h2 {
-        color: #667eea;
-        margin-top: 25px;
-        margin-bottom: 15px;
-      }
     </style>
   </head>
   <body>
@@ -627,7 +592,7 @@
             </div>
           </div>
           <div class="trust-badges">
-            <span class="trust-badge" data-i18n="trust_badge_ssl">SSL-verschl&uuml;sselt</span>
+            <span class="trust-badge" data-i18n="trust_badge_ssl">SSL-verschlüsselt</span>
             <span class="trust-badge" data-i18n="trust_badge_gdpr">DSGVO-konform</span>
             <span class="trust-badge" data-i18n="trust_badge_secure">Sicherer Cloud-Storage</span>
           </div>
@@ -654,7 +619,7 @@
         </div>
 
         <div class="input-group">
-          <label for="userEmail" data-i18n="email_label">Deine Email (f�r Credits)</label>
+          <label for="userEmail" data-i18n="email_label">Deine Email (für Credits)</label>
           <input
             type="email"
             name="email"
@@ -667,37 +632,25 @@
         <div class="premium-feature">
           <input type="checkbox" id="addSummary" name="add_summary" value="1" />
           <label for="addSummary">
-            <span data-i18n="add_summary_label">?? AI-Zusammenfassung hinzuf�gen (+3)</span>
+            <span data-i18n="add_summary_label">🤖 AI-Zusammenfassung hinzufügen (+Faktencheck)</span>
             <small data-i18n="add_summary_hint">
-	<!-- Sprach-Auswahl f�r Summary (nur sichtbar wenn AI-Summary aktiviert) -->
-	<div id="summary-lang-selector" style="display: none; margin-left: 30px; margin-top: 10px;">
-		<label for="summary-lang">?? Zusammenfassung in:</label>
-		<select id="summary-lang" name="summary_lang">
-			<option value="auto" selected>?? Automatisch (Video-Sprache)</option>
-			<option value="de">???? Deutsch</option>
-			<option value="en">???? English</option>
-			<option value="ar">??????????? (Arabisch)</option>
-			<option value="fr">???? Fran�ais</option>
-			<option value="es">???? Espa�ol</option>
-		</select>
-	</div>
-              Spare Zeit: Erhalte Key-Points in 3 Minuten statt 2 Stunden Video schauen!
+              Spare Zeit: Erhalte Key-Points + Faktencheck in 3 Minuten statt 2 Stunden Video schauen!
             </small>
           </label>
         </div>
 
-        <!-- Sprach-Auswahl f�r Summary -->
+        <!-- Sprach-Auswahl für Summary -->
         <div id="summary-lang-selector" style="display: none; margin-left: 30px; margin-top: 15px;">
           <label for="summary-lang" style="font-size: 14px;">
-            ?? <span data-i18n="summary-language">Zusammenfassung in:</span>
+            🌍 <span data-i18n="summary-language">Zusammenfassung in:</span>
           </label>
           <select id="summary-lang" name="summary-lang" style="padding: 8px; border-radius: 5px;">
-            <option value="auto" selected>?? Automatisch (Video-Sprache)</option>
-            <option value="de">???? Deutsch</option>
-            <option value="en">???? English</option>
-            <option value="ar">???? ??????? (Arabisch)</option>
-            <option value="fr">???? Fran�ais</option>
-            <option value="es">???? Espa�ol</option>
+            <option value="auto" selected>🌐 Automatisch (Video-Sprache)</option>
+            <option value="de">🇩🇪 Deutsch</option>
+            <option value="en">🇬🇧 English</option>
+            <option value="ar">🇸🇦 العربية (Arabisch)</option>
+            <option value="fr">🇫🇷 Français</option>
+            <option value="es">🇪🇸 Español</option>
           </select>
         </div>
 
@@ -707,7 +660,7 @@
           id="creditsInfo"
         >
           <div class="credits-label" style="font-size: 14px; color: #555;">
-            <span data-i18n="available_credits">Verf�gbare Credits</span>: <strong id="creditsRemaining">--</strong>
+            <span data-i18n="available_credits">Verfügbare Credits</span>: <strong id="creditsRemaining">--</strong>
           </div>
           <div style="font-size: 12px; color: #888; margin-top: 5px;">
             <span data-i18n="plan">Plan</span>: <span id="userPlan">--</span>
@@ -736,7 +689,7 @@
               <span data-i18n="whisper_task_label">Whisper Task</span>
               <select name="whisperTask" id="whisperTask">
                 <option value="transcribe" data-i18n="task_transcribe" selected>Originalsprache (transcribe)</option>
-                <option value="translate" data-i18n="task_translate">�bersetzen ( Englisch)</option>
+                <option value="translate" data-i18n="task_translate">Übersetzen (→ Englisch)</option>
               </select>
             </label>
             <label>
@@ -806,10 +759,10 @@
       </section>
 
       <section class="content-section faq">
-        <h2 data-i18n="faq_title">H�ufig gestellte Fragen</h2>
+        <h2 data-i18n="faq_title">Häufig gestellte Fragen</h2>
         <div class="faq-list">
           <details class="faq-item" open>
-            <summary data-i18n="faq_languages">Welche Sprachen werden unterst�tzt?</summary>
+            <summary data-i18n="faq_languages">Welche Sprachen werden unterstützt?</summary>
             <p>Video Transcriber deckt über 90 Sprachen ab – ideal für globale Content-Teams.</p>
           </details>
           <details class="faq-item">
@@ -821,7 +774,7 @@
             <p>Ja. Wir arbeiten DSGVO-konform, SSL-verschlüsselt und hosten in der EU.</p>
           </details>
           <details class="faq-item">
-            <summary data-i18n="faq_cancel">Kann ich k�ndigen?</summary>
+            <summary data-i18n="faq_cancel">Kann ich kündigen?</summary>
             <p>Natürlich — du kannst jederzeit kündigen oder im Free-Plan bleiben.</p>
           </details>
         </div>
@@ -1202,18 +1155,40 @@
         const translate = (key, fallback) => translations[key] || fallback;
         const summaryFile = result.summary_file || metadata.summary_file;
         const summaryError = result.summary_error || metadata.summary_error;
+        
         if (summaryFile || summaryError) {
           const summaryCard = document.createElement("div");
           summaryCard.className = "result-card";
+          summaryCard.style.cssText = `
+            background: linear-gradient(135deg, rgba(79, 70, 229, 0.15), rgba(99, 102, 241, 0.1));
+            border: 2px solid rgba(129, 140, 248, 0.3);
+            box-shadow: 0 8px 24px rgba(79, 70, 229, 0.2);
+          `;
 
           const title = document.createElement("h3");
-          title.textContent = translate("summary_title", "AI-Zusammenfassung");
+          title.textContent = "🤖 " + translate("summary_title", "AI-Zusammenfassung & Faktencheck");
+          title.style.cssText = `
+            color: #38bdf8;
+            font-size: 1.4rem;
+            margin: 0 0 16px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+          `;
           summaryCard.appendChild(title);
 
           if (summaryFile) {
             const summaryDiv = document.createElement("div");
             summaryDiv.className = "summary-text";
-            summaryDiv.textContent = translate("summary_loading", "Zusammenfassung wird geladen...");
+            summaryDiv.style.cssText = `
+              background: rgba(15, 23, 42, 0.65);
+              border-radius: 16px;
+              padding: 24px;
+              margin: 16px 0;
+              line-height: 1.7;
+              color: #e2e8f0;
+            `;
+            summaryDiv.textContent = translate("summary_loading", "⏳ Zusammenfassung wird geladen...");
             summaryCard.appendChild(summaryDiv);
 
             fetch(`${downloadBase}/${summaryFile}`)
@@ -1224,15 +1199,132 @@
                 return res.text();
               })
               .then((text) => {
-                const summaryText = text.trim() || translate("summary_not_available", "Keine Zusammenfassung verf�gbar.");
+                const summaryText = text.trim() || translate("summary_not_available", "Keine Zusammenfassung verfügbar.");
+                
                 if (typeof marked !== 'undefined') {
                   summaryDiv.innerHTML = marked.parse(summaryText);
+                  
+                  // Styling für alle Tabellen
+                  summaryDiv.querySelectorAll('table').forEach(table => {
+                    table.style.cssText = `
+                      width: 100%;
+                      border-collapse: collapse;
+                      margin: 24px 0;
+                      background: rgba(30, 41, 59, 0.6);
+                      border-radius: 12px;
+                      overflow: hidden;
+                      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+                    `;
+                  });
+                  
+                  summaryDiv.querySelectorAll('th').forEach(th => {
+                    th.style.cssText = `
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      color: white;
+                      padding: 16px;
+                      text-align: left;
+                      font-weight: 600;
+                      font-size: 0.95rem;
+                      border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+                    `;
+                  });
+                  
+                  summaryDiv.querySelectorAll('td').forEach(td => {
+                    td.style.cssText = `
+                      padding: 14px 16px;
+                      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                      color: #e2e8f0;
+                      vertical-align: top;
+                      font-size: 0.9rem;
+                    `;
+                  });
+                  
+                  summaryDiv.querySelectorAll('tbody tr').forEach((tr, index) => {
+                    if (index % 2 === 0) {
+                      tr.style.background = 'rgba(15, 23, 42, 0.3)';
+                    }
+                    tr.addEventListener('mouseenter', () => {
+                      tr.style.background = 'rgba(102, 126, 234, 0.25)';
+                      tr.style.transform = 'scale(1.01)';
+                      tr.style.transition = 'all 0.2s ease';
+                    });
+                    tr.addEventListener('mouseleave', () => {
+                      tr.style.background = index % 2 === 0 ? 'rgba(15, 23, 42, 0.3)' : 'transparent';
+                      tr.style.transform = 'scale(1)';
+                    });
+                  });
+                  
+                  // Überschriften
+                  summaryDiv.querySelectorAll('h2').forEach(h2 => {
+                    h2.style.cssText = `
+                      color: #38bdf8;
+                      margin-top: 32px;
+                      margin-bottom: 16px;
+                      font-size: 1.5rem;
+                      font-weight: 700;
+                      border-bottom: 2px solid rgba(56, 189, 248, 0.3);
+                      padding-bottom: 10px;
+                    `;
+                  });
+                  
+                  summaryDiv.querySelectorAll('h3').forEach(h3 => {
+                    h3.style.cssText = `
+                      color: #818cf8;
+                      margin-top: 24px;
+                      margin-bottom: 12px;
+                      font-size: 1.2rem;
+                      font-weight: 600;
+                    `;
+                  });
+                  
+                  // Listen
+                  summaryDiv.querySelectorAll('ul, ol').forEach(list => {
+                    list.style.cssText = `
+                      margin: 16px 0;
+                      padding-left: 24px;
+                    `;
+                  });
+                  
+                  summaryDiv.querySelectorAll('li').forEach(li => {
+                    li.style.cssText = `
+                      margin: 10px 0;
+                      line-height: 1.6;
+                    `;
+                  });
+                  
+                  // Code
+                  summaryDiv.querySelectorAll('code').forEach(code => {
+                    code.style.cssText = `
+                      background: rgba(148, 163, 184, 0.2);
+                      padding: 2px 6px;
+                      border-radius: 4px;
+                      font-family: 'Courier New', monospace;
+                      font-size: 0.9em;
+                    `;
+                  });
+                  
+                  // Paragraphen
+                  summaryDiv.querySelectorAll('p').forEach(p => {
+                    p.style.cssText = `
+                      margin: 12px 0;
+                      line-height: 1.7;
+                    `;
+                  });
+                  
+                  // Bold
+                  summaryDiv.querySelectorAll('strong').forEach(strong => {
+                    strong.style.cssText = `
+                      color: #38bdf8;
+                      font-weight: 700;
+                    `;
+                  });
+                  
                 } else {
                   summaryDiv.textContent = summaryText;
                 }
               })
-              .catch(() => {
-                summaryDiv.textContent = translate("summary_failed", "Fehler beim Laden der Zusammenfassung.");
+              .catch((err) => {
+                summaryDiv.innerHTML = `<p style="color: #fca5a5;">❌ ${translate("summary_failed", "Fehler beim Laden der Zusammenfassung")}: ${err.message}</p>`;
               });
 
             const downloadLink = document.createElement("a");
@@ -1240,14 +1332,44 @@
             downloadLink.href = `${downloadBase}/${summaryFile}`;
             downloadLink.target = "_blank";
             downloadLink.rel = "noopener";
-            downloadLink.textContent = translate("summary_download", "summary.txt herunterladen");
+            downloadLink.textContent = "📄 " + translate("summary_download", "Zusammenfassung herunterladen");
+            downloadLink.style.cssText = `
+              margin-top: 16px;
+              display: inline-flex;
+              align-items: center;
+              gap: 8px;
+              padding: 12px 20px;
+              border-radius: 12px;
+              background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+              color: white;
+              font-weight: 600;
+              text-decoration: none;
+              transition: transform 0.2s ease, box-shadow 0.2s ease;
+              box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
+            `;
+            downloadLink.addEventListener('mouseenter', () => {
+              downloadLink.style.transform = 'translateY(-2px)';
+              downloadLink.style.boxShadow = '0 6px 20px rgba(56, 189, 248, 0.4)';
+            });
+            downloadLink.addEventListener('mouseleave', () => {
+              downloadLink.style.transform = 'translateY(0)';
+              downloadLink.style.boxShadow = '0 4px 12px rgba(56, 189, 248, 0.3)';
+            });
             summaryCard.appendChild(downloadLink);
           }
 
           if (summaryError) {
             const errorNote = document.createElement("p");
             errorNote.className = "summary-error";
-            errorNote.textContent = summaryError;
+            errorNote.style.cssText = `
+              background: rgba(239, 68, 68, 0.15);
+              border: 1px solid rgba(248, 113, 113, 0.4);
+              border-radius: 8px;
+              padding: 12px 16px;
+              margin-top: 16px;
+              color: #fca5a5;
+            `;
+            errorNote.textContent = "❌ " + summaryError;
             summaryCard.appendChild(errorNote);
           }
 
@@ -1258,11 +1380,19 @@
           result.transcripts.forEach((entry) => {
             const card = document.createElement("div");
             card.className = "result-card";
-            card.innerHTML = `<h3>Sprache: ${entry.target_language}</h3>`;
+            card.innerHTML = `<h3>🌍 Sprache: ${entry.target_language}</h3>`;
 
             const pre = document.createElement("pre");
             pre.textContent = entry.text || "";
-            pre.style.whiteSpace = "pre-wrap";
+            pre.style.cssText = `
+              white-space: pre-wrap;
+              background: rgba(30, 41, 59, 0.6);
+              padding: 16px;
+              border-radius: 12px;
+              line-height: 1.6;
+              max-height: 400px;
+              overflow-y: auto;
+            `;
             card.appendChild(pre);
 
             const outputs = result.outputs ? result.outputs[entry.target_language] : null;
@@ -1270,9 +1400,9 @@
               const downloads = document.createElement("div");
               downloads.className = "downloads";
               downloads.innerHTML = `
-                <a class="download-link" href="${downloadBase}/${outputs.txt}" target="_blank">TXT herunterladen</a>
-                ${outputs.srt ? `<a class="download-link" href="${downloadBase}/${outputs.srt}" target="_blank">SRT herunterladen</a>` : ""}
-                ${outputs.vtt ? `<a class="download-link" href="${downloadBase}/${outputs.vtt}" target="_blank">VTT herunterladen</a>` : ""}
+                <a class="download-link" href="${downloadBase}/${outputs.txt}" target="_blank">📄 TXT herunterladen</a>
+                ${outputs.srt ? `<a class="download-link" href="${downloadBase}/${outputs.srt}" target="_blank">📝 SRT herunterladen</a>` : ""}
+                ${outputs.vtt ? `<a class="download-link" href="${downloadBase}/${outputs.vtt}" target="_blank">📹 VTT herunterladen</a>` : ""}
               `;
               card.appendChild(downloads);
             }
