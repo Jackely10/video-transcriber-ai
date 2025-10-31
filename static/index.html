@@ -1427,6 +1427,14 @@
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
+        console.log("=== FORM SUBMIT DEBUG ===");
+        console.log("Video URL Input exists:", !!videoUrlInput);
+        console.log("Video URL value:", videoUrlInput ? videoUrlInput.value : "NOT FOUND");
+        console.log("Email Input exists:", !!emailInput);
+        console.log("Email value:", emailInput ? emailInput.value : "NOT FOUND");
+        console.log("File Input exists:", !!fileInput);
+        console.log("File selected:", fileInput && fileInput.files ? fileInput.files.length : 0);
+        console.log("=== END DEBUG ===");
         try {
           hideError();
           if (resultContainer) {
