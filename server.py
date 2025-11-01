@@ -370,10 +370,69 @@ def get_public_stats() -> Any:
 
 @app.route("/jobs/<job_id>/files/<path:filename>", methods=["GET"])
 def get_job_file(job_id: str, filename: str) -> Any:
-    base_dir = (JOB_STORAGE_ROOT / job_id).resolve()
-    target = (base_dir / filename).resolve()
-    if not base_dir.exists() or not target.exists() or not target.is_file() or base_dir not in target.parents:
+    """Serve files from completed jobs with detailed logging."""
+    logger.info("=" * 80)
+    logger.info("📁 FILE REQUEST")
+    logger.info("=" * 80)
+    logger.info(f"  Job ID: {job_id}")
+    logger.info(f"  Filename: {filename}")
+
+    # Security: validate job_id format
+    if not job_id or '..' in job_id or '/' in job_id:
+        logger.warning(f"❌ Invalid job_id format: {job_id}")
         abort(404)
+
+    # Resolve paths
+    base_dir = (JOB_STORAGE_ROOT / job_id).resolve()
+    logger.info(f"  Base directory: {base_dir}")
+    logger.info(f"  Base exists: {base_dir.exists()}")
+
+    if not base_dir.exists():
+        logger.warning(f"❌ Job directory not found: {base_dir}")
+
+        # List what's actually in JOB_STORAGE_ROOT
+        logger.info(f"  Available jobs in {JOB_STORAGE_ROOT}:")
+        try:
+            for item in JOB_STORAGE_ROOT.iterdir():
+                if item.is_dir():
+                    logger.info(f"    - {item.name}")
+        except Exception as e:
+            logger.error(f"  Could not list jobs: {e}")
+
+        abort(404)
+
+    # List files in job directory
+    logger.info(f"  Files in job directory:")
+    try:
+        for item in base_dir.iterdir():
+            logger.info(f"    - {item.name} ({'dir' if item.is_dir() else 'file'})")
+    except Exception as e:
+        logger.error(f"  Could not list files: {e}")
+
+    target = (base_dir / filename).resolve()
+    logger.info(f"  Target file: {target}")
+    logger.info(f"  File exists: {target.exists()}")
+
+    # Security check: ensure target is within base_dir
+    try:
+        target.relative_to(base_dir)
+    except ValueError:
+        logger.warning(f"❌ Path traversal attempt detected")
+        logger.warning(f"  Target: {target}")
+        logger.warning(f"  Base: {base_dir}")
+        abort(404)
+
+    if not target.exists():
+        logger.warning(f"❌ File not found: {target}")
+        abort(404)
+
+    if not target.is_file():
+        logger.warning(f"❌ Not a file: {target}")
+        abort(404)
+
+    logger.info(f"✅ Serving file: {filename}")
+    logger.info("=" * 80)
+
     return send_from_directory(base_dir, filename, as_attachment=False)
 
 
