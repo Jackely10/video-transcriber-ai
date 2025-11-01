@@ -19,6 +19,7 @@ from jobs import (
     JOB_STORAGE_ROOT,
     enqueue_ping_job,
     enqueue_transcription_job,
+    ensure_summary_materialization,
     get_job_status,
 )
 from logging_config import log_job_error, log_job_progress, log_job_start, setup_logging
@@ -383,7 +384,7 @@ def get_job_file(job_id: str, filename: str) -> Any:
         abort(404)
 
     # Resolve paths
-    base_dir = (JOB_STORAGE_ROOT / job_id).resolve()
+    base_dir = (JOB_STORAGE_ROOT / job_id / "files").resolve()
     logger.info(f"  Base directory: {base_dir}")
     logger.info(f"  Base exists: {base_dir.exists()}")
 
@@ -616,8 +617,16 @@ def create_job() -> Any:
 def get_job(job_id: str) -> Any:
     try:
         payload = get_job_status(job_id)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 404
+    except Exception as exc:
+        logger.exception("Failed to load job %s", job_id)
+        return jsonify({"error": str(exc)}), 200
+
+    try:
+        ensure_summary_materialization(job_id, payload)
+    except Exception as exc:
+        logger.exception("Failed to materialize summary for job %s", job_id)
+        payload.setdefault("warnings", []).append("summary_materialization_failed")
+        payload["summary_materialization_error"] = str(exc)
     return jsonify(payload)
 
 

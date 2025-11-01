@@ -116,6 +116,8 @@ def _export_transcripts(
     base_segments: List[SegmentResult],
     audio_seconds: float,
 ) -> Dict[str, Dict[str, str]]:
+    job_files_dir = job_dir / "files"
+    job_files_dir.mkdir(parents=True, exist_ok=True)
     outputs: Dict[str, Dict[str, str]] = {}
     for entry in transcripts:
         language = entry["target_language"]
@@ -123,7 +125,7 @@ def _export_transcripts(
         is_base = entry.get("is_base", False)
         seg_override = entry.get("segments")
 
-        language_dir = job_dir / language
+        language_dir = job_files_dir / language
         language_dir.mkdir(parents=True, exist_ok=True)
 
         txt_path = language_dir / f"{language}.txt"
@@ -145,9 +147,9 @@ def _export_transcripts(
         _write_vtt(vtt_path, segments_for_srt)
 
         outputs[language] = {
-            "txt": txt_path.relative_to(job_dir).as_posix(),
-            "srt": srt_path.relative_to(job_dir).as_posix(),
-            "vtt": vtt_path.relative_to(job_dir).as_posix(),
+            "txt": txt_path.relative_to(job_files_dir).as_posix(),
+            "srt": srt_path.relative_to(job_files_dir).as_posix(),
+            "vtt": vtt_path.relative_to(job_files_dir).as_posix(),
         }
 
     return outputs
@@ -353,8 +355,13 @@ def process_job(
         progress_accumulator = 1.0
         _record_step("export", start, step_times)
 
+        files_dir = job_dir / "files"
+        files_dir.mkdir(parents=True, exist_ok=True)
+
         summary_llm_key_present: Optional[bool] = None
         summary_generation_success = False
+        summary_lang_code: Optional[str] = None
+        summary_path: Optional[Path] = None
 
         if summary_requested:
             LOGGER.info("=" * 80)
@@ -365,9 +372,14 @@ def process_job(
             LOGGER.info(f"  🌍 Target language: {metadata.get('summary_lang_effective', 'auto')}")
             LOGGER.info(f"  🌍 Requested language: {metadata.get('summary_lang_requested', 'auto')}")
             LOGGER.info("=" * 80)
-            summary_lang_code = (metadata.get("summary_lang_effective") or base_language or "de").strip() or "de"
-            summary_lang_code = summary_lang_code.lower()
-            summary_dir = job_dir / summary_lang_code
+            summary_lang_code = (
+                metadata.get("summary_lang_effective")
+                or metadata.get("base_language")
+                or metadata.get("detected_language")
+                or "en"
+            )
+            summary_lang_code = (summary_lang_code or "en").strip().lower() or "en"
+            summary_dir = files_dir / summary_lang_code
             summary_dir.mkdir(parents=True, exist_ok=True)
             summary_path = summary_dir / "summary.txt"
             summary_llm_key_present = bool(
@@ -379,56 +391,77 @@ def process_job(
             LOGGER.info(f"  🔑 LLM key present: {summary_llm_key_present}")
             summary_content: Optional[str] = None
 
-            try:
-                LOGGER.info("🚀 Calling generate_summary()...")
-                summary_text = generate_summary(
-                    base_text, 
-                    segments=segments, 
-                    target_lang=metadata.get("summary_lang_effective", "auto")
-                )
-                LOGGER.info("=" * 80)
-                LOGGER.info("✅ SUMMARY GENERATION SUCCESSFUL!")
-                LOGGER.info("=" * 80)
-                LOGGER.info(f"  📊 Summary length: {len(summary_text)} chars")
-                LOGGER.info(f"  📝 Preview: {summary_text[:200]}...")
-                LOGGER.info("=" * 80)
-                
-                summary_content = summary_text.strip() + "\n"
-                summary_generation_success = True
+            if not summary_llm_key_present:
+                summary_error = summary_error or "Missing API key for AI summary generation."
+                summary_content = "AI summary not available (missing API key on server).\n"
+                LOGGER.warning("Skipping AI summary generation because no LLM key is configured.")
+            else:
+                try:
+                    LOGGER.info("🚀 Calling generate_summary()...")
+                    summary_text = generate_summary(
+                        base_text,
+                        segments=segments,
+                        target_lang=metadata.get("summary_lang_effective", "auto"),
+                    )
+                    LOGGER.info("=" * 80)
+                    LOGGER.info("✅ SUMMARY GENERATION SUCCESSFUL!")
+                    LOGGER.info("=" * 80)
+                    LOGGER.info(f"  📊 Summary length: {len(summary_text)} chars")
+                    LOGGER.info(f"  📝 Preview: {summary_text[:200]}...")
+                    LOGGER.info("=" * 80)
 
-            except SummaryGenerationError as err:
-                summary_error = str(err)
-                LOGGER.error("=" * 80)
-                LOGGER.error("❌ SUMMARY GENERATION ERROR")
-                LOGGER.error("=" * 80)
-                LOGGER.error(f"  🔴 Error type: SummaryGenerationError")
-                LOGGER.error(f"  💬 Error message: {err}")
-                LOGGER.error("=" * 80)
-                LOGGER.exception("Full traceback:")
-                LOGGER.error("=" * 80)
-            except Exception as err:
-                summary_error = f"Summary generation failed: {err}"
-                LOGGER.error("=" * 80)
-                LOGGER.error("❌ UNEXPECTED SUMMARY ERROR")
-                LOGGER.error("=" * 80)
-                LOGGER.error(f"  🔴 Error type: {type(err).__name__}")
-                LOGGER.error(f"  💬 Error message: {err}")
-                LOGGER.error("=" * 80)
-                LOGGER.exception("Full traceback:")
-                LOGGER.error("=" * 80)
+                    summary_content = summary_text.strip() + "\n"
+                    summary_generation_success = True
+
+                except SummaryGenerationError as err:
+                    summary_error = str(err)
+                    LOGGER.error("=" * 80)
+                    LOGGER.error("❌ SUMMARY GENERATION ERROR")
+                    LOGGER.error("=" * 80)
+                    LOGGER.error(f"  🔴 Error type: SummaryGenerationError")
+                    LOGGER.error(f"  💬 Error message: {err}")
+                    LOGGER.error("=" * 80)
+                    LOGGER.exception("Full traceback:")
+                    LOGGER.error("=" * 80)
+                except Exception as err:
+                    summary_error = f"Summary generation failed: {err}"
+                    LOGGER.error("=" * 80)
+                    LOGGER.error("❌ UNEXPECTED SUMMARY ERROR")
+                    LOGGER.error("=" * 80)
+                    LOGGER.error(f"  🔴 Error type: {type(err).__name__}")
+                    LOGGER.error(f"  💬 Error message: {err}")
+                    LOGGER.error("=" * 80)
+                    LOGGER.exception("Full traceback:")
+                    LOGGER.error("=" * 80)
             finally:
                 if summary_content is None:
                     reason = summary_error or "Summary generator returned no content."
                     summary_content = f"AI summary not available. Reason: {reason}\n"
-                summary_path.write_text(summary_content, encoding="utf-8")
-                summary_rel_path = summary_path.relative_to(job_dir).as_posix()
+                try:
+                    with summary_path.open("w", encoding="utf-8") as summary_file:
+                        summary_file.write(summary_content)
+                except Exception as write_err:
+                    LOGGER.exception("Failed to write summary file at %s", summary_path)
+                    summary_error = summary_error or f"Failed to write summary file: {write_err}"
+                summary_rel_path = summary_path.relative_to(files_dir).as_posix()
                 LOGGER.info(f"💾 Summary saved to: {summary_rel_path}")
                 LOGGER.info(f"  🔁 Summary generation status: {'success' if summary_generation_success else 'failed'}")
                 LOGGER.info(f"  🔑 LLM key present: {summary_llm_key_present}")
+                LOGGER.info(
+                    "Summary materialization info: job_id=%s summary_lang=%s summary_path=%s llm_key_available=%s error=%s",
+                    job_id,
+                    summary_lang_code,
+                    str(summary_path),
+                    summary_llm_key_present,
+                    summary_error,
+                )
 
         metadata["summary_file"] = summary_rel_path
         if summary_error:
             metadata["summary_error"] = summary_error
+        if summary_llm_key_present is not None:
+            metadata["summary_llm_key_present"] = summary_llm_key_present
+        metadata["summary_generation_success"] = summary_generation_success
 
         total_elapsed = time.perf_counter() - overall_start
         download_base = f"/jobs/{job_id}/files"
@@ -597,3 +630,52 @@ def get_job_status(job_id: str) -> Dict[str, Any]:
         response["error"] = response.get("error") or str(job.exc_info).splitlines()[-1] if job.exc_info else "Job failed"
 
     return response
+
+
+def ensure_summary_materialization(job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = payload.get("metadata") or {}
+    summary_lang = (
+        metadata.get("summary_lang_effective")
+        or metadata.get("base_language")
+        or metadata.get("detected_language")
+        or "en"
+    )
+    summary_lang = (summary_lang or "en").strip().lower() or "en"
+
+    files_dir = JOB_STORAGE_ROOT / job_id / "files"
+    files_dir.mkdir(parents=True, exist_ok=True)
+    summary_file = payload.get("summary_file") or metadata.get("summary_file")
+    if summary_file:
+        summary_path = files_dir / summary_file
+    else:
+        summary_path = files_dir / summary_lang / "summary.txt"
+        summary_file = summary_path.relative_to(files_dir).as_posix()
+        payload["summary_file"] = summary_file
+        metadata["summary_file"] = summary_file
+
+    info: Dict[str, Any] = {
+        "job_id": job_id,
+        "summary_lang": summary_lang,
+        "summary_path": str(summary_path),
+        "llm_key_available": metadata.get("summary_llm_key_present"),
+    }
+
+    if not summary_path.exists():
+        reason = metadata.get("summary_error") or "AI summary not available."
+        try:
+            summary_path.parent.mkdir(parents=True, exist_ok=True)
+            with summary_path.open("w", encoding="utf-8") as summary_file_handle:
+                summary_file_handle.write(f"AI summary not available. Reason: {reason}\n")
+        except Exception as exc:
+            info["error"] = str(exc)
+            LOGGER.exception("Failed to materialize summary file for job %s at %s", job_id, summary_path)
+
+    LOGGER.info(
+        "Summary materialization (fetch): job_id=%s summary_lang=%s summary_path=%s llm_key_available=%s error=%s",
+        info["job_id"],
+        info["summary_lang"],
+        info["summary_path"],
+        info.get("llm_key_available"),
+        info.get("error"),
+    )
+    return info
