@@ -1149,10 +1149,10 @@
         const translations = window.activeTranslations || {};
         const translate = (key, fallback) => translations[key] || fallback;
         const summaryFile = result.summary_file || metadata.summary_file;
-        const summaryPath = summaryFile.includes('/') ? summaryFile : `${detectedLang}/${summaryFile}`;
-        const summaryPath = summaryFile.includes('/') ? summaryFile : `${detectedLang}/${summaryFile}`;
-        fetch(`${downloadBase}/${summaryPath}`)
-        const summaryPath = summaryFile && summaryFile.includes('/') ? summaryFile : summaryFile;
+        let summaryPath = null;
+        if (summaryFile) {
+          summaryPath = summaryFile.includes('/') ? summaryFile : `${detectedLang}/${summaryFile}`;
+        }
         const summaryError = result.summary_error || metadata.summary_error;
         
         if (summaryFile || summaryError) {
@@ -1190,173 +1190,177 @@
             summaryDiv.textContent = translate("summary_loading", "⏳ Zusammenfassung wird geladen...");
             summaryCard.appendChild(summaryDiv);
 
-            fetch(`${downloadBase}/${summaryFile}`)
-              .then((res) => {
-                if (!res.ok) {
-                  throw new Error(`HTTP ${res.status}`);
-                }
-                return res.text();
-              })
-              .then((text) => {
-                const summaryText = text.trim() || translate("summary_not_available", "Keine Zusammenfassung verfügbar.");
-                
-                if (typeof marked !== 'undefined') {
-                  summaryDiv.innerHTML = marked.parse(summaryText);
-                  
-                  // Styling für alle Tabellen
-                  summaryDiv.querySelectorAll('table').forEach(table => {
-                    table.style.cssText = `
-                      width: 100%;
-                      border-collapse: collapse;
-                      margin: 24px 0;
-                      background: rgba(30, 41, 59, 0.6);
-                      border-radius: 12px;
-                      overflow: hidden;
-                      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-                    `;
-                  });
-                  
-                  summaryDiv.querySelectorAll('th').forEach(th => {
-                    th.style.cssText = `
-                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                      color: white;
-                      padding: 16px;
-                      text-align: left;
-                      font-weight: 600;
-                      font-size: 0.95rem;
-                      border-bottom: 2px solid rgba(255, 255, 255, 0.2);
-                    `;
-                  });
-                  
-                  summaryDiv.querySelectorAll('td').forEach(td => {
-                    td.style.cssText = `
-                      padding: 14px 16px;
-                      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-                      color: #e2e8f0;
-                      vertical-align: top;
-                      font-size: 0.9rem;
-                    `;
-                  });
-                  
-                  summaryDiv.querySelectorAll('tbody tr').forEach((tr, index) => {
-                    if (index % 2 === 0) {
-                      tr.style.background = 'rgba(15, 23, 42, 0.3)';
-                    }
-                    tr.addEventListener('mouseenter', () => {
-                      tr.style.background = 'rgba(102, 126, 234, 0.25)';
-                      tr.style.transform = 'scale(1.01)';
-                      tr.style.transition = 'all 0.2s ease';
+            if (summaryPath) {
+              fetch(`${downloadBase}/${summaryPath}`)
+                .then((res) => {
+                  if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                  }
+                  return res.text();
+                })
+                .then((text) => {
+                  const summaryText = text.trim() || translate("summary_not_available", "Keine Zusammenfassung verfügbar.");
+
+                  if (typeof marked !== 'undefined') {
+                    summaryDiv.innerHTML = marked.parse(summaryText);
+
+                    // Styling für alle Tabellen
+                    summaryDiv.querySelectorAll('table').forEach(table => {
+                      table.style.cssText = `
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 24px 0;
+                        background: rgba(30, 41, 59, 0.6);
+                        border-radius: 12px;
+                        overflow: hidden;
+                        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+                      `;
                     });
-                    tr.addEventListener('mouseleave', () => {
-                      tr.style.background = index % 2 === 0 ? 'rgba(15, 23, 42, 0.3)' : 'transparent';
-                      tr.style.transform = 'scale(1)';
+
+                    summaryDiv.querySelectorAll('th').forEach(th => {
+                      th.style.cssText = `
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        padding: 16px;
+                        text-align: left;
+                        font-weight: 600;
+                        font-size: 0.95rem;
+                        border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+                      `;
                     });
-                  });
-                  
-                  // Überschriften
-                  summaryDiv.querySelectorAll('h2').forEach(h2 => {
-                    h2.style.cssText = `
-                      color: #38bdf8;
-                      margin-top: 32px;
-                      margin-bottom: 16px;
-                      font-size: 1.5rem;
-                      font-weight: 700;
-                      border-bottom: 2px solid rgba(56, 189, 248, 0.3);
-                      padding-bottom: 10px;
-                    `;
-                  });
-                  
-                  summaryDiv.querySelectorAll('h3').forEach(h3 => {
-                    h3.style.cssText = `
-                      color: #818cf8;
-                      margin-top: 24px;
-                      margin-bottom: 12px;
-                      font-size: 1.2rem;
-                      font-weight: 600;
-                    `;
-                  });
-                  
-                  // Listen
-                  summaryDiv.querySelectorAll('ul, ol').forEach(list => {
-                    list.style.cssText = `
-                      margin: 16px 0;
-                      padding-left: 24px;
-                    `;
-                  });
-                  
-                  summaryDiv.querySelectorAll('li').forEach(li => {
-                    li.style.cssText = `
-                      margin: 10px 0;
-                      line-height: 1.6;
-                    `;
-                  });
-                  
-                  // Code
-                  summaryDiv.querySelectorAll('code').forEach(code => {
-                    code.style.cssText = `
-                      background: rgba(148, 163, 184, 0.2);
-                      padding: 2px 6px;
-                      border-radius: 4px;
-                      font-family: 'Courier New', monospace;
-                      font-size: 0.9em;
-                    `;
-                  });
-                  
-                  // Paragraphen
-                  summaryDiv.querySelectorAll('p').forEach(p => {
-                    p.style.cssText = `
-                      margin: 12px 0;
-                      line-height: 1.7;
-                    `;
-                  });
-                  
-                  // Bold
-                  summaryDiv.querySelectorAll('strong').forEach(strong => {
-                    strong.style.cssText = `
-                      color: #38bdf8;
-                      font-weight: 700;
-                    `;
-                  });
-                  
-                } else {
-                  summaryDiv.textContent = summaryText;
-                }
-              })
-              .catch((err) => {
-                summaryDiv.innerHTML = `<p style="color: #fca5a5;">❌ ${translate("summary_failed", "Fehler beim Laden der Zusammenfassung")}: ${err.message}</p>`;
+
+                    summaryDiv.querySelectorAll('td').forEach(td => {
+                      td.style.cssText = `
+                        padding: 14px 16px;
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                        color: #e2e8f0;
+                        vertical-align: top;
+                        font-size: 0.9rem;
+                      `;
+                    });
+
+                    summaryDiv.querySelectorAll('tbody tr').forEach((tr, index) => {
+                      if (index % 2 === 0) {
+                        tr.style.background = 'rgba(15, 23, 42, 0.3)';
+                      }
+                      tr.addEventListener('mouseenter', () => {
+                        tr.style.background = 'rgba(102, 126, 234, 0.25)';
+                        tr.style.transform = 'scale(1.01)';
+                        tr.style.transition = 'all 0.2s ease';
+                      });
+                      tr.addEventListener('mouseleave', () => {
+                        tr.style.background = index % 2 === 0 ? 'rgba(15, 23, 42, 0.3)' : 'transparent';
+                        tr.style.transform = 'scale(1)';
+                      });
+                    });
+
+                    // Überschriften
+                    summaryDiv.querySelectorAll('h2').forEach(h2 => {
+                      h2.style.cssText = `
+                        color: #38bdf8;
+                        margin-top: 32px;
+                        margin-bottom: 16px;
+                        font-size: 1.5rem;
+                        font-weight: 700;
+                        border-bottom: 2px solid rgba(56, 189, 248, 0.3);
+                        padding-bottom: 10px;
+                      `;
+                    });
+
+                    summaryDiv.querySelectorAll('h3').forEach(h3 => {
+                      h3.style.cssText = `
+                        color: #818cf8;
+                        margin-top: 24px;
+                        margin-bottom: 12px;
+                        font-size: 1.2rem;
+                        font-weight: 600;
+                      `;
+                    });
+
+                    // Listen
+                    summaryDiv.querySelectorAll('ul, ol').forEach(list => {
+                      list.style.cssText = `
+                        margin: 16px 0;
+                        padding-left: 24px;
+                      `;
+                    });
+
+                    summaryDiv.querySelectorAll('li').forEach(li => {
+                      li.style.cssText = `
+                        margin: 10px 0;
+                        line-height: 1.6;
+                      `;
+                    });
+
+                    // Code
+                    summaryDiv.querySelectorAll('code').forEach(code => {
+                      code.style.cssText = `
+                        background: rgba(148, 163, 184, 0.2);
+                        padding: 2px 6px;
+                        border-radius: 4px;
+                        font-family: 'Courier New', monospace;
+                        font-size: 0.9em;
+                      `;
+                    });
+
+                    // Paragraphen
+                    summaryDiv.querySelectorAll('p').forEach(p => {
+                      p.style.cssText = `
+                        margin: 12px 0;
+                        line-height: 1.7;
+                      `;
+                    });
+
+                    // Bold
+                    summaryDiv.querySelectorAll('strong').forEach(strong => {
+                      strong.style.cssText = `
+                        color: #38bdf8;
+                        font-weight: 700;
+                      `;
+                    });
+
+                  } else {
+                    summaryDiv.textContent = summaryText;
+                  }
+                })
+                .catch((err) => {
+                  summaryDiv.innerHTML = `<p style="color: #fca5a5;">�?O ${translate("summary_failed", "Fehler beim Laden der Zusammenfassung")}: ${err.message}</p>`;
+                });
+            } else {
+              summaryDiv.textContent = translate("summary_not_available", "Keine Zusammenfassung verfügbar.");
+            }
+
+            if (summaryPath) {
+              const downloadLink = document.createElement("a");
+              downloadLink.className = "download-link";
+              downloadLink.href = `${downloadBase}/${summaryPath}`;
+              downloadLink.target = "_blank";
+              downloadLink.rel = "noopener";
+              downloadLink.textContent = "dY", " + translate("summary_download", "Zusammenfassung herunterladen");
+              downloadLink.style.cssText = `
+                margin-top: 16px;
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 12px 20px;
+                border-radius: 12px;
+                background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+                color: white;
+                font-weight: 600;
+                text-decoration: none;
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
+                box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
+              `;
+              downloadLink.addEventListener('mouseenter', () => {
+                downloadLink.style.transform = 'translateY(-2px)';
+                downloadLink.style.boxShadow = '0 6px 20px rgba(56, 189, 248, 0.4)';
               });
-
-            const downloadLink = document.createElement("a");
-            downloadLink.className = "download-link";
-            downloadLink.href = `${downloadBase}/${summaryPath}`;
-            downloadLink.target = "_blank";
-            downloadLink.rel = "noopener";
-            downloadLink.textContent = "📄 " + translate("summary_download", "Zusammenfassung herunterladen");
-            downloadLink.style.cssText = `
-              margin-top: 16px;
-              display: inline-flex;
-              align-items: center;
-              gap: 8px;
-              padding: 12px 20px;
-              border-radius: 12px;
-              background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
-              color: white;
-              font-weight: 600;
-              text-decoration: none;
-              transition: transform 0.2s ease, box-shadow 0.2s ease;
-              box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
-            `;
-            downloadLink.addEventListener('mouseenter', () => {
-              downloadLink.style.transform = 'translateY(-2px)';
-              downloadLink.style.boxShadow = '0 6px 20px rgba(56, 189, 248, 0.4)';
-            });
-            downloadLink.addEventListener('mouseleave', () => {
-              downloadLink.style.transform = 'translateY(0)';
-              downloadLink.style.boxShadow = '0 4px 12px rgba(56, 189, 248, 0.3)';
-            });
-            summaryCard.appendChild(downloadLink);
-          }
-
+              downloadLink.addEventListener('mouseleave', () => {
+                downloadLink.style.transform = 'translateY(0)';
+                downloadLink.style.boxShadow = '0 4px 12px rgba(56, 189, 248, 0.3)';
+              });
+              summaryCard.appendChild(downloadLink);
+            }
           if (summaryError) {
             const errorNote = document.createElement("p");
             errorNote.className = "summary-error";
