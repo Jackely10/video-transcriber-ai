@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -30,6 +31,10 @@ SILENCE_SAMPLE_PATH: Optional[Path] = None
 
 SUPPORTED_LANGUAGES: set[str] = set()
 LANGUAGE_ALIASES: Dict[str, str] = {"source": "source"}
+
+YT_COOKIE_FILE = os.getenv("YT_COOKIE_FILE", "./cookies/youtube.com.txt")
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_language_inputs(values: Iterable[str]) -> Tuple[List[str], bool]:
@@ -63,6 +68,7 @@ class DeviceProfile:
 
 def download_audio(url: str, temp_dir: Path) -> Path:
     output_template = str(temp_dir / "%(id)s.%(ext)s")
+    cookie_in_use = False
     ydl_opts = {
         "format": "worst",
         "outtmpl": output_template,
@@ -76,11 +82,23 @@ def download_audio(url: str, temp_dir: Path) -> Path:
         },
     }
 
+    if os.path.exists(YT_COOKIE_FILE):
+        ydl_opts["cookiefile"] = YT_COOKIE_FILE
+        cookie_in_use = True
+    else:
+        logger.warning("YouTube cookie file not found: %s", YT_COOKIE_FILE)
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(url, download=True)
         except DownloadError as exc:
-            raise ValueError(f"Audio konnte nicht heruntergeladen werden: {exc}") from exc
+            cookie_status = "gefunden" if cookie_in_use else "nicht gefunden"
+            error = ValueError(
+                f"Audio konnte nicht heruntergeladen werden (Cookie-Datei {cookie_status} - {YT_COOKIE_FILE}): {exc}"
+            )
+            error.cookie_file_present = cookie_in_use  # type: ignore[attr-defined]
+            error.cookie_file_path = YT_COOKIE_FILE  # type: ignore[attr-defined]
+            raise error from exc
         download_path = Path(ydl.prepare_filename(info))
 
     if not download_path.exists():

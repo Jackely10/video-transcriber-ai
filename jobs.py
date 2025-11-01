@@ -490,7 +490,11 @@ def process_job(
         LOGGER.exception("Full traceback:")
         LOGGER.error("=" * 80)
         
-        _update_job_meta("failed", progress_accumulator, {"error": str(exc), "status_detail": "job failed"})
+        failure_meta = {"error": str(exc), "status_detail": "job failed"}
+        if hasattr(exc, "cookie_file_present"):
+            failure_meta["cookie_file_present"] = getattr(exc, "cookie_file_present")
+            failure_meta["cookie_file_path"] = getattr(exc, "cookie_file_path", None)
+        _update_job_meta("failed", progress_accumulator, failure_meta)
         log_job_error(job_id, exc)
         raise
 
@@ -557,6 +561,9 @@ def get_job_status(job_id: str) -> Dict[str, Any]:
         "device_profile": meta.get("metadata", {}).get("device_profile") if meta.get("metadata") else meta.get("device_profile"),
         "error": meta.get("error"),
     }
+    if "cookie_file_present" in meta:
+        response["cookie_file_present"] = meta["cookie_file_present"]
+        response["cookie_file_path"] = meta.get("cookie_file_path")
     if "download_base" in meta:
         response["download_base"] = meta["download_base"]
 
