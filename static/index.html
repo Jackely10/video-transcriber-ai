@@ -607,7 +607,7 @@
 
       <div id="error-container" class="notice error"></div>
 
-      <form id="job-form">
+      <form id="job-form" method="POST" action="/jobs">
         <div class="input-group">
           <label for="videoUrl" data-i18n="video_url_label">Video URL</label>
           <input
@@ -1154,6 +1154,10 @@
         const translations = window.activeTranslations || {};
         const translate = (key, fallback) => translations[key] || fallback;
         const summaryFile = result.summary_file || metadata.summary_file;
+        const summaryPath = summaryFile.includes('/') ? summaryFile : `${detectedLang}/${summaryFile}`;
+        const summaryPath = summaryFile.includes('/') ? summaryFile : `${detectedLang}/${summaryFile}`;
+        fetch(`${downloadBase}/${summaryPath}`)
+        const summaryPath = summaryFile && summaryFile.includes('/') ? summaryFile : summaryFile;
         const summaryError = result.summary_error || metadata.summary_error;
         
         if (summaryFile || summaryError) {
@@ -1329,7 +1333,7 @@
 
             const downloadLink = document.createElement("a");
             downloadLink.className = "download-link";
-            downloadLink.href = `${downloadBase}/${summaryFile}`;
+            downloadLink.href = `${downloadBase}/${summaryPath}`;
             downloadLink.target = "_blank";
             downloadLink.rel = "noopener";
             downloadLink.textContent = "📄 " + translate("summary_download", "Zusammenfassung herunterladen");
