@@ -64,11 +64,16 @@ class DeviceProfile:
 def download_audio(url: str, temp_dir: Path) -> Path:
     output_template = str(temp_dir / "%(id)s.%(ext)s")
     ydl_opts = {
-        "format": "bestaudio[abr<=96]/bestaudio/best",
+        "format": "worst",
         "outtmpl": output_template,
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
+        "extractor_args": {
+            "youtube": {
+                "skip": ["dash", "hls"],
+            },
+        },
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
