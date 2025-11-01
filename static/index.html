@@ -856,11 +856,6 @@
         summaryLangContainer.style.display = addSummaryInput && addSummaryInput.checked ? "block" : "none";
       }
 
-      updateSummaryLanguageVisibility();
-      if (addSummaryInput) {
-        addSummaryInput.addEventListener("change", updateSummaryLanguageVisibility);
-      }
-
       let currentJobId = null;
       let jobStartedAt = null;
       let startTime = 0;
@@ -1416,30 +1411,44 @@
         }
       }
 
-      if (emailInput) {
-        emailInput.addEventListener("blur", async () => {
-          const email = emailInput.value.trim();
-          if (!email || !email.includes("@")) {
-            updateCreditsDisplay(null);
-            updateRateLimitDisplay(null);
-            return;
-          }
-          await fetchUserStats(email);
-          await fetchRateLimitInfo(email);
-        });
-      }
+      document.addEventListener("DOMContentLoaded", async function () {
+        console.log("DOM loaded!");
+        updateSummaryLanguageVisibility();
+        if (addSummaryInput) {
+          addSummaryInput.addEventListener("change", updateSummaryLanguageVisibility);
+        }
 
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        console.log("=== FORM SUBMIT DEBUG ===");
-        console.log("Video URL Input exists:", !!videoUrlInput);
-        console.log("Video URL value:", videoUrlInput ? videoUrlInput.value : "NOT FOUND");
-        console.log("Email Input exists:", !!emailInput);
-        console.log("Email value:", emailInput ? emailInput.value : "NOT FOUND");
-        console.log("File Input exists:", !!fileInput);
-        console.log("File selected:", fileInput && fileInput.files ? fileInput.files.length : 0);
-        console.log("=== END DEBUG ===");
-        try {
+        if (emailInput) {
+          emailInput.addEventListener("blur", async () => {
+            const email = emailInput.value.trim();
+            if (!email || !email.includes("@")) {
+              updateCreditsDisplay(null);
+              updateRateLimitDisplay(null);
+              return;
+            }
+            await fetchUserStats(email);
+            await fetchRateLimitInfo(email);
+          });
+        }
+
+        if (!form) {
+          console.warn("Job form not found");
+          console.log("Script loaded successfully!");
+          return;
+        }
+
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          console.log("FORM PREVENTED DEFAULT!");
+          console.log("=== FORM SUBMIT DEBUG ===");
+          console.log("Video URL Input exists:", !!videoUrlInput);
+          console.log("Video URL value:", videoUrlInput ? videoUrlInput.value : "NOT FOUND");
+          console.log("Email Input exists:", !!emailInput);
+          console.log("Email value:", emailInput ? emailInput.value : "NOT FOUND");
+          console.log("File Input exists:", !!fileInput);
+          console.log("File selected:", fileInput && fileInput.files ? fileInput.files.length : 0);
+          console.log("=== END DEBUG ===");
+          try {
           hideError();
           if (resultContainer) {
             resultContainer.classList.remove("active");
@@ -1546,6 +1555,8 @@
             submitBtn.disabled = false;
           }
         }
+        });
+        console.log("Script loaded successfully!");
       });
     </script>
     <script>
@@ -1626,6 +1637,7 @@
         setInterval(fetchPublicStats, 60000);
         window.addEventListener('focus', fetchPublicStats);
       });
+      console.log("Script loaded successfully!");
     </script>
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
   </body>
