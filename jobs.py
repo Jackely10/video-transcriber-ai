@@ -353,6 +353,9 @@ def process_job(
         progress_accumulator = 1.0
         _record_step("export", start, step_times)
 
+        summary_llm_key_present: Optional[bool] = None
+        summary_generation_success = False
+
         if summary_requested:
             LOGGER.info("=" * 80)
             LOGGER.info("🤖 AI SUMMARY GENERATION REQUESTED")
@@ -362,7 +365,20 @@ def process_job(
             LOGGER.info(f"  🌍 Target language: {metadata.get('summary_lang_effective', 'auto')}")
             LOGGER.info(f"  🌍 Requested language: {metadata.get('summary_lang_requested', 'auto')}")
             LOGGER.info("=" * 80)
-            
+            summary_lang_code = (metadata.get("summary_lang_effective") or base_language or "de").strip() or "de"
+            summary_lang_code = summary_lang_code.lower()
+            summary_dir = job_dir / summary_lang_code
+            summary_dir.mkdir(parents=True, exist_ok=True)
+            summary_path = summary_dir / "summary.txt"
+            summary_llm_key_present = bool(
+                os.getenv("OPENAI_API_KEY")
+                or os.getenv("ANTHROPIC_API_KEY")
+                or os.getenv("GEMINI_API_KEY")
+                or os.getenv("GROQ_API_KEY")
+            )
+            LOGGER.info(f"  🔑 LLM key present: {summary_llm_key_present}")
+            summary_content: Optional[str] = None
+
             try:
                 LOGGER.info("🚀 Calling generate_summary()...")
                 summary_text = generate_summary(
@@ -377,14 +393,9 @@ def process_job(
                 LOGGER.info(f"  📝 Preview: {summary_text[:200]}...")
                 LOGGER.info("=" * 80)
                 
-                lang_dir = job_dir / base_language
-                lang_dir.mkdir(parents=True, exist_ok=True)
-                summary_path = lang_dir / "summary.txt"
-                summary_path.write_text(summary_text.strip() + "\n", encoding="utf-8")
-                summary_rel_path = summary_path.relative_to(job_dir).as_posix()
-                
-                LOGGER.info(f"💾 Summary saved to: {summary_rel_path}")
-                
+                summary_content = summary_text.strip() + "\n"
+                summary_generation_success = True
+
             except SummaryGenerationError as err:
                 summary_error = str(err)
                 LOGGER.error("=" * 80)
@@ -405,6 +416,15 @@ def process_job(
                 LOGGER.error("=" * 80)
                 LOGGER.exception("Full traceback:")
                 LOGGER.error("=" * 80)
+            finally:
+                if summary_content is None:
+                    reason = summary_error or "Summary generator returned no content."
+                    summary_content = f"AI summary not available. Reason: {reason}\n"
+                summary_path.write_text(summary_content, encoding="utf-8")
+                summary_rel_path = summary_path.relative_to(job_dir).as_posix()
+                LOGGER.info(f"💾 Summary saved to: {summary_rel_path}")
+                LOGGER.info(f"  🔁 Summary generation status: {'success' if summary_generation_success else 'failed'}")
+                LOGGER.info(f"  🔑 LLM key present: {summary_llm_key_present}")
 
         metadata["summary_file"] = summary_rel_path
         if summary_error:
@@ -477,6 +497,10 @@ def process_job(
             LOGGER.info(f"  📝 Summary: ❌ Failed - {summary_error}")
         else:
             LOGGER.info(f"  📝 Summary: Not requested")
+        if summary_requested:
+            LOGGER.info(f"  📁 Summary file path: {summary_rel_path or 'N/A'}")
+            LOGGER.info(f"  🔑 LLM key present: {summary_llm_key_present}")
+            LOGGER.info(f"  🧪 Summary success: {summary_generation_success}")
         LOGGER.info("=" * 80)
         
         return result
