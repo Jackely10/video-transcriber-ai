@@ -1479,23 +1479,19 @@
           const jsonPayload = hasFileUpload
             ? null
             : {
+                video_url: videoUrl || undefined,
+                url: videoUrl || undefined,
+                email: emailValue,
                 whisperTask: whisperTaskInput ? whisperTaskInput.value : "transcribe",
                 profile: profileInput ? profileInput.value : "fast",
                 includeSource: includeSourceInput ? includeSourceInput.checked : true,
                 add_summary: addSummarySelected,
                 addSummary: addSummarySelected,
+                sourceLanguage: sourceLanguageValue || null,
               };
 
-          if (jsonPayload) {
-            if (videoUrl) {
-              jsonPayload.video_url = videoUrl;
-              jsonPayload.url = videoUrl;
-            }
-            jsonPayload.sourceLanguage = sourceLanguageValue || null;
-            jsonPayload.email = emailValue;
-            if (addSummarySelected && summaryLangSelect) {
-              jsonPayload.summary_lang = summaryLangSelect.value;
-            }
+          if (jsonPayload && addSummarySelected && summaryLangSelect) {
+            jsonPayload.summary_lang = summaryLangSelect.value;
           }
 
           if (formData) {
