@@ -380,7 +380,10 @@ def process_job(
             )
             summary_lang_code = (summary_lang_code or "en").strip().lower() or "en"
             summary_dir = files_dir / summary_lang_code
-            summary_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                os.makedirs(summary_dir, exist_ok=True)
+            except Exception as dir_err:
+                LOGGER.exception("Failed to create summary directory for job %s at %s", job_id, summary_dir)
             summary_path = summary_dir / "summary.txt"
             summary_llm_key_present = bool(
                 os.getenv("OPENAI_API_KEY")
@@ -438,12 +441,13 @@ def process_job(
                     reason = summary_error or "Summary generator returned no content."
                     summary_content = f"AI summary not available. Reason: {reason}\n"
                 try:
-                    with summary_path.open("w", encoding="utf-8") as summary_file:
+                    os.makedirs(summary_path.parent, exist_ok=True)
+                    with open(summary_path, "w", encoding="utf-8") as summary_file:
                         summary_file.write(summary_content)
                 except Exception as write_err:
-                    LOGGER.exception("Failed to write summary file at %s", summary_path)
+                    LOGGER.exception("could not write summary to %s", summary_path)
                     summary_error = summary_error or f"Failed to write summary file: {write_err}"
-                summary_rel_path = summary_path.relative_to(files_dir).as_posix()
+                summary_rel_path = os.path.relpath(summary_path, files_dir)
                 LOGGER.info(f"💾 Summary saved to: {summary_rel_path}")
                 LOGGER.info(f"  🔁 Summary generation status: {'success' if summary_generation_success else 'failed'}")
                 LOGGER.info(f"  🔑 LLM key present: {summary_llm_key_present}")
@@ -632,7 +636,7 @@ def get_job_status(job_id: str) -> Dict[str, Any]:
     return response
 
 
-def ensure_summary_materialization(job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+def _materialize_summary(job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     metadata = payload.get("metadata") or {}
     summary_lang = (
         metadata.get("summary_lang_effective")
@@ -679,3 +683,15 @@ def ensure_summary_materialization(job_id: str, payload: Dict[str, Any]) -> Dict
         info.get("error"),
     )
     return info
+
+
+def ensure_summary_materialization_safe(job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return _materialize_summary(job_id, payload)
+    except Exception as exc:
+        LOGGER.warning(
+            "non-fatal summary materialization error for job %s: %s",
+            job_id,
+            exc,
+        )
+        return {"job_id": job_id, "error": str(exc)}
