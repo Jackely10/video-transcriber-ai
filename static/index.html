@@ -1161,7 +1161,7 @@
         console.log("Summary file name:", summaryFileName);
         console.log("Download URL:", `${downloadBase}/${summaryFileName}`);
         const summaryError = result.summary_error || metadata.summary_error;
-        
+
         if (summaryFile || summaryError) {
           const summaryCard = document.createElement("div");
           summaryCard.className = "result-card";
@@ -1198,8 +1198,13 @@
             summaryCard.appendChild(summaryDiv);
 
             if (summaryPath) {
-              fetch(`${downloadBase}/${summaryFileName}`)
+              console.log("BEFORE FETCH - summaryFileName:", summaryFileName);
+              console.log("BEFORE FETCH - Full URL:", `${downloadBase}/${summaryFileName}`);
+              const fullSummaryUrl = `${downloadBase}/${summaryFileName}`;
+              console.log("Fetching summary from:", fullSummaryUrl);
+              fetch(fullSummaryUrl)
                 .then((res) => {
+                  console.log("Summary fetch response:", res.status, res.url);
                   if (!res.ok) {
                     throw new Error(`HTTP ${res.status}`);
                   }
