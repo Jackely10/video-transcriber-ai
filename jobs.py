@@ -361,7 +361,7 @@ def process_job(
         summary_llm_key_present: Optional[bool] = None
         summary_generation_success = False
         summary_lang_code: Optional[str] = None
-        summary_path: Optional[Path] = None
+        summary_content: Optional[str] = None
 
         if summary_requested:
             LOGGER.info("=" * 80)
@@ -379,12 +379,6 @@ def process_job(
                 or "en"
             )
             summary_lang_code = (summary_lang_code or "en").strip().lower() or "en"
-            summary_dir = files_dir / summary_lang_code
-            try:
-                os.makedirs(summary_dir, exist_ok=True)
-            except Exception as dir_err:
-                LOGGER.exception("Failed to create summary directory for job %s at %s", job_id, summary_dir)
-            summary_path = summary_dir / "summary.txt"
             summary_llm_key_present = bool(
                 os.getenv("OPENAI_API_KEY")
                 or os.getenv("ANTHROPIC_API_KEY")
@@ -436,29 +430,17 @@ def process_job(
                     LOGGER.error("=" * 80)
                     LOGGER.exception("Full traceback:")
                     LOGGER.error("=" * 80)
-            finally:
-                if summary_content is None:
-                    reason = summary_error or "Summary generator returned no content."
-                    summary_content = f"AI summary not available. Reason: {reason}\n"
-                try:
-                    os.makedirs(summary_path.parent, exist_ok=True)
-                    with open(summary_path, "w", encoding="utf-8") as summary_file:
-                        summary_file.write(summary_content)
-                except Exception as write_err:
-                    LOGGER.exception("could not write summary to %s", summary_path)
-                    summary_error = summary_error or f"Failed to write summary file: {write_err}"
-                summary_rel_path = os.path.relpath(summary_path, files_dir)
-                LOGGER.info(f"💾 Summary saved to: {summary_rel_path}")
-                LOGGER.info(f"  🔁 Summary generation status: {'success' if summary_generation_success else 'failed'}")
-                LOGGER.info(f"  🔑 LLM key present: {summary_llm_key_present}")
-                LOGGER.info(
-                    "Summary materialization info: job_id=%s summary_lang=%s summary_path=%s llm_key_available=%s error=%s",
-                    job_id,
-                    summary_lang_code,
-                    str(summary_path),
-                    summary_llm_key_present,
-                    summary_error,
-                )
+            summary_payload: Dict[str, Any] = {
+                "job_id": job_id,
+                "metadata": metadata,
+                "summary_lang": summary_lang_code,
+                "summary_content": summary_content,
+                "summary_error": summary_error,
+                "summary_llm_key_present": summary_llm_key_present,
+                "summary_generation_success": summary_generation_success,
+            }
+            materialize_summary_file_safe(summary_payload)
+            summary_rel_path = summary_payload.get("summary_file")
 
         metadata["summary_file"] = summary_rel_path
         if summary_error:
@@ -636,62 +618,91 @@ def get_job_status(job_id: str) -> Dict[str, Any]:
     return response
 
 
-def _materialize_summary(job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    metadata = payload.get("metadata") or {}
-    summary_lang = (
-        metadata.get("summary_lang_effective")
-        or metadata.get("base_language")
-        or metadata.get("detected_language")
-        or "en"
-    )
-    summary_lang = (summary_lang or "en").strip().lower() or "en"
+def materialize_summary_file_safe(job: Dict[str, Any]) -> None:
+    summary_path_str = None
+    try:
+        job_id = str(job.get("job_id") or "unknown")
+        metadata: Dict[str, Any] = job.setdefault("metadata", {})
+        summary_lang = (
+            job.get("summary_lang")
+            or metadata.get("summary_lang_effective")
+            or metadata.get("base_language")
+            or metadata.get("detected_language")
+            or "en"
+        )
+        summary_lang = (summary_lang or "en").strip().lower() or "en"
+        job["summary_lang"] = summary_lang
 
-    files_dir = JOB_STORAGE_ROOT / job_id / "files"
-    files_dir.mkdir(parents=True, exist_ok=True)
-    summary_file = payload.get("summary_file") or metadata.get("summary_file")
-    if summary_file:
-        summary_path = files_dir / summary_file
-    else:
-        summary_path = files_dir / summary_lang / "summary.txt"
-        summary_file = summary_path.relative_to(files_dir).as_posix()
-        payload["summary_file"] = summary_file
-        metadata["summary_file"] = summary_file
+        files_dir = JOB_STORAGE_ROOT / job_id / "files"
+        summary_dir = files_dir / summary_lang
+        os.makedirs(summary_dir, exist_ok=True)
+        summary_path = summary_dir / "summary.txt"
+        summary_path_str = str(summary_path)
 
-    info: Dict[str, Any] = {
-        "job_id": job_id,
-        "summary_lang": summary_lang,
-        "summary_path": str(summary_path),
-        "llm_key_available": metadata.get("summary_llm_key_present"),
-    }
+        summary_error = job.get("summary_error") or metadata.get("summary_error")
+        summary_content = job.get("summary_content")
+        if not summary_content:
+            reason = summary_error or "AI summary not available."
+            summary_content = f"AI summary not available. Reason: {reason}\n"
+        if not summary_content.endswith("\n"):
+            summary_content += "\n"
 
-    if not summary_path.exists():
-        reason = metadata.get("summary_error") or "AI summary not available."
-        try:
-            summary_path.parent.mkdir(parents=True, exist_ok=True)
-            with summary_path.open("w", encoding="utf-8") as summary_file_handle:
-                summary_file_handle.write(f"AI summary not available. Reason: {reason}\n")
-        except Exception as exc:
-            info["error"] = str(exc)
-            LOGGER.exception("Failed to materialize summary file for job %s at %s", job_id, summary_path)
+        with summary_path.open("w", encoding="utf-8") as handle:
+            handle.write(summary_content)
 
-    LOGGER.info(
-        "Summary materialization (fetch): job_id=%s summary_lang=%s summary_path=%s llm_key_available=%s error=%s",
-        info["job_id"],
-        info["summary_lang"],
-        info["summary_path"],
-        info.get("llm_key_available"),
-        info.get("error"),
-    )
-    return info
+        relative_path = summary_path.relative_to(files_dir).as_posix()
+        metadata["summary_file"] = relative_path
+        job["summary_file"] = relative_path
+        job["summary_path"] = summary_path_str
+
+        LOGGER.info(
+            "Summary materialized safely: job_id=%s summary_lang=%s summary_path=%s llm_key_available=%s error=%s",
+            job_id,
+            summary_lang,
+            summary_path_str,
+            job.get("summary_llm_key_present"),
+            summary_error,
+        )
+    except Exception as exc:
+        LOGGER.exception("could not write summary to %s", summary_path_str or "unknown path")
+        job["summary_materialization_error"] = str(exc)
+        if summary_path_str:
+            job["summary_path"] = summary_path_str
 
 
 def ensure_summary_materialization_safe(job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    info: Dict[str, Any] = {
+        "job_id": job_id,
+        "summary_lang": None,
+        "summary_path": None,
+        "llm_key_available": None,
+    }
     try:
-        return _materialize_summary(job_id, payload)
+        metadata = payload.get("metadata") or {}
+        job_ctx: Dict[str, Any] = {
+            "job_id": job_id,
+            "metadata": metadata,
+            "summary_lang": (
+                metadata.get("summary_lang_effective")
+                or metadata.get("base_language")
+                or metadata.get("detected_language")
+                or payload.get("summary_lang")
+                or "en"
+            ),
+            "summary_error": payload.get("summary_error") or metadata.get("summary_error"),
+            "summary_llm_key_present": metadata.get("summary_llm_key_present"),
+            "summary_content": None,
+        }
+        materialize_summary_file_safe(job_ctx)
+        if job_ctx.get("summary_file"):
+            payload["summary_file"] = job_ctx["summary_file"]
+            metadata["summary_file"] = job_ctx["summary_file"]
+            info["summary_path"] = job_ctx.get("summary_path")
+        info["summary_lang"] = job_ctx.get("summary_lang")
+        info["llm_key_available"] = job_ctx.get("summary_llm_key_present")
+        if job_ctx.get("summary_materialization_error"):
+            info["error"] = job_ctx["summary_materialization_error"]
     except Exception as exc:
-        LOGGER.warning(
-            "non-fatal summary materialization error for job %s: %s",
-            job_id,
-            exc,
-        )
-        return {"job_id": job_id, "error": str(exc)}
+        LOGGER.warning("non-fatal summary materialization error for job %s: %s", job_id, exc)
+        info["error"] = str(exc)
+    return info
