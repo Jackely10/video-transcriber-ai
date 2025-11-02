@@ -1153,6 +1153,10 @@
         if (summaryFile) {
           summaryPath = summaryFile.includes('/') ? summaryFile : `${detectedLang}/${summaryFile}`;
         }
+        const rawSummaryPath = summaryPath || `${detectedLang}/summary.txt`;
+        const summaryFileName = rawSummaryPath.endsWith("summary.txt")
+          ? rawSummaryPath
+          : `${rawSummaryPath.replace(/\/$/, "")}/summary.txt`;
         const summaryError = result.summary_error || metadata.summary_error;
         
         if (summaryFile || summaryError) {
@@ -1191,7 +1195,7 @@
             summaryCard.appendChild(summaryDiv);
 
             if (summaryPath) {
-              fetch(`${downloadBase}/${summaryPath}`)
+              fetch(`${downloadBase}/${summaryFileName}`)
                 .then((res) => {
                   if (!res.ok) {
                     throw new Error(`HTTP ${res.status}`);
@@ -1333,7 +1337,7 @@
             if (summaryPath) {
               const downloadLink = document.createElement("a");
               downloadLink.className = "download-link";
-              downloadLink.href = `${downloadBase}/${summaryPath}`;
+              downloadLink.href = `${downloadBase}/${summaryFileName}`;
               downloadLink.target = "_blank";
               downloadLink.rel = "noopener";
               downloadLink.textContent = "📄 " + translate("summary_download", "Zusammenfassung herunterladen");
