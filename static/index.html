@@ -1154,9 +1154,12 @@
           summaryPath = summaryFile.includes('/') ? summaryFile : `${detectedLang}/${summaryFile}`;
         }
         const rawSummaryPath = summaryPath || `${detectedLang}/summary.txt`;
-        const summaryFileName = rawSummaryPath.endsWith("summary.txt")
-          ? rawSummaryPath
-          : `${rawSummaryPath.replace(/\/$/, "")}/summary.txt`;
+        const normalizedPath = rawSummaryPath.replace(/\/$/, "");
+        const summaryFileName = normalizedPath.endsWith("summary.txt")
+          ? normalizedPath
+          : `${normalizedPath}/summary.txt`;
+        console.log("Summary file name:", summaryFileName);
+        console.log("Download URL:", `${downloadBase}/${summaryFileName}`);
         const summaryError = result.summary_error || metadata.summary_error;
         
         if (summaryFile || summaryError) {
