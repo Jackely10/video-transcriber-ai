@@ -394,11 +394,19 @@ def process_job(
                 LOGGER.warning("Skipping AI summary generation because no LLM key is configured.")
             else:
                 try:
+                    target_summary_lang = (
+                        summary_lang_code
+                        or metadata.get("summary_lang_effective")
+                        or base_language
+                        or metadata.get("detected_language")
+                        or "en"
+                    )
+                    metadata["summary_lang_effective"] = target_summary_lang
                     LOGGER.info("🚀 Calling generate_summary()...")
                     summary_text = generate_summary(
                         base_text,
                         segments=segments,
-                        target_lang=metadata.get("summary_lang_effective", "auto"),
+                        target_lang=target_summary_lang,
                     )
                     LOGGER.info("=" * 80)
                     LOGGER.info("✅ SUMMARY GENERATION SUCCESSFUL!")
