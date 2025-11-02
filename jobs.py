@@ -430,19 +430,35 @@ def process_job(
                     LOGGER.error("=" * 80)
                     LOGGER.exception("Full traceback:")
                     LOGGER.error("=" * 80)
-            summary_payload: Dict[str, Any] = {
-                "job_id": job_id,
-                "metadata": metadata,
-                "summary_lang": summary_lang_code,
-                "summary_content": summary_content,
-                "summary_error": summary_error,
-                "summary_llm_key_present": summary_llm_key_present,
-                "summary_generation_success": summary_generation_success,
-            }
-            materialize_summary_file_safe(summary_payload)
-            summary_rel_path = summary_payload.get("summary_file")
+            summary_lang_dir = files_dir / summary_lang_code
+            summary_lang_dir.mkdir(parents=True, exist_ok=True)
+            summary_path = summary_lang_dir / "summary.txt"
 
-        metadata["summary_file"] = summary_rel_path
+            if not summary_content:
+                reason = summary_error or "Summary generator returned no content."
+                summary_content = f"AI summary not available. Reason: {reason}\n"
+            if not summary_content.endswith("\n"):
+                summary_content += "\n"
+
+            summary_path.write_text(summary_content, encoding="utf-8")
+            summary_rel_path = summary_path.relative_to(files_dir).as_posix()
+            metadata["summary_file"] = summary_rel_path
+
+            LOGGER.info(f"📄 Summary saved to: {summary_path}")
+            LOGGER.info(f"📋 Summary file in metadata: {metadata.get('summary_file')}")
+            try:
+                files_listing = [
+                    str(path.relative_to(files_dir))
+                    for path in files_dir.rglob("*")
+                    if path.is_file()
+                ]
+            except Exception as listing_error:  # pragma: no cover - diagnostic logging
+                LOGGER.warning("Failed to enumerate summary output files for job %s: %s", job_id, listing_error)
+            else:
+                LOGGER.info(f"📂 Files in output directory: {files_listing}")
+
+        if summary_rel_path:
+            metadata["summary_file"] = summary_rel_path
         if summary_error:
             metadata["summary_error"] = summary_error
         if summary_llm_key_present is not None:
@@ -623,6 +639,7 @@ def materialize_summary_file_safe(job: Dict[str, Any]) -> None:
     try:
         job_id = str(job.get("job_id") or "unknown")
         metadata: Dict[str, Any] = job.setdefault("metadata", {})
+        provided_rel_path = (job.get("summary_file") or metadata.get("summary_file") or "").strip()
         summary_lang = (
             job.get("summary_lang")
             or metadata.get("summary_lang_effective")
@@ -634,9 +651,14 @@ def materialize_summary_file_safe(job: Dict[str, Any]) -> None:
         job["summary_lang"] = summary_lang
 
         files_dir = JOB_STORAGE_ROOT / job_id / "files"
-        summary_dir = files_dir / summary_lang
-        os.makedirs(summary_dir, exist_ok=True)
-        summary_path = summary_dir / "summary.txt"
+        summary_rel_path_path: Path
+        if provided_rel_path:
+            summary_rel_path_path = Path(provided_rel_path.replace("\\", "/"))
+            summary_path = files_dir / summary_rel_path_path
+        else:
+            summary_rel_path_path = Path(summary_lang) / "summary.txt"
+            summary_path = files_dir / summary_rel_path_path
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
         summary_path_str = str(summary_path)
 
         summary_error = job.get("summary_error") or metadata.get("summary_error")
@@ -654,6 +676,19 @@ def materialize_summary_file_safe(job: Dict[str, Any]) -> None:
         metadata["summary_file"] = relative_path
         job["summary_file"] = relative_path
         job["summary_path"] = summary_path_str
+
+        LOGGER.info(f"📄 Summary saved to: {summary_path}")
+        LOGGER.info(f"📋 Summary file in metadata: {metadata.get('summary_file')}")
+        try:
+            files_listing = [
+                str(path.relative_to(files_dir))
+                for path in files_dir.rglob("*")
+                if path.is_file()
+            ]
+        except Exception as listing_error:  # pragma: no cover - diagnostic logging
+            LOGGER.warning("Failed to enumerate summary output files for job %s: %s", job_id, listing_error)
+        else:
+            LOGGER.info(f"📂 Files in output directory: {files_listing}")
 
         LOGGER.info(
             "Summary materialized safely: job_id=%s summary_lang=%s summary_path=%s llm_key_available=%s error=%s",
@@ -692,6 +727,7 @@ def ensure_summary_materialization_safe(job_id: str, payload: Dict[str, Any]) ->
             "summary_error": payload.get("summary_error") or metadata.get("summary_error"),
             "summary_llm_key_present": metadata.get("summary_llm_key_present"),
             "summary_content": None,
+            "summary_file": metadata.get("summary_file"),
         }
         materialize_summary_file_safe(job_ctx)
         if job_ctx.get("summary_file"):
