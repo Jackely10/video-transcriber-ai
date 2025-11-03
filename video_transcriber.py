@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -30,6 +31,9 @@ SILENCE_SAMPLE_PATH: Optional[Path] = None
 
 SUPPORTED_LANGUAGES: set[str] = set()
 LANGUAGE_ALIASES: Dict[str, str] = {"source": "source"}
+
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_language_inputs(values: Iterable[str]) -> Tuple[List[str], bool]:
@@ -62,13 +66,19 @@ class DeviceProfile:
 
 
 def download_audio(url: str, temp_dir: Path) -> Path:
-    output_template = str(temp_dir / "%(id)s.%(ext)s")
+    audio_file = temp_dir / "%(id)s.%(ext)s"
     ydl_opts = {
-        "format": "bestaudio[abr<=96]/bestaudio/best",
-        "outtmpl": output_template,
+        "format": "bestaudio/best",
+        "outtmpl": str(audio_file),
         "quiet": True,
         "no_warnings": True,
-        "noplaylist": True,
+        "extract_flat": False,
+        "extractor_args": {
+            "youtube": {
+                "skip": ["dash", "hls"],
+                "player_skip": ["configs", "webpage"],
+            },
+        },
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

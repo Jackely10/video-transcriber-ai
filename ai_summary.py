@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 AI_PROVIDER = os.getenv("AI_PROVIDER", "openai").lower()
 DEFAULT_MODEL = os.getenv("OPENAI_SUMMARY_MODEL", "gpt-4o-mini")
-ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
 
 logger.info(f"🔍 AI_PROVIDER: {AI_PROVIDER}")
 logger.info(f"🔑 ANTHROPIC_API_KEY gesetzt: {bool(os.getenv('ANTHROPIC_API_KEY'))}")

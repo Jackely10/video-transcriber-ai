@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Optional
 
-DB_PATH = Path("users.db")
+DB_PATH = Path("/app/data/users.db")
 
 
 def init_database() -> None:

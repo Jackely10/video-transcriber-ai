@@ -369,8 +369,8 @@ def process_job(
             if not target_summary_lang or target_summary_lang in ("auto", "same"):
                 target_summary_lang = base_language or "en"
             LOGGER.info(
-                f"  🌍 Resolved summary language: {target_summary_lang} "
-                f"(detected={base_language}, requested={requested_lang})"
+                f"  🌍 Resolved summary language: target_summary_lang "
+                f"(detected=base_language, requested=requested_lang)"
             )
 
             try:

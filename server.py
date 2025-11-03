@@ -19,6 +19,7 @@ from jobs import (
     JOB_STORAGE_ROOT,
     enqueue_ping_job,
     enqueue_transcription_job,
+    ensure_summary_materialization_safe,
     get_job_status,
 )
 from logging_config import log_job_error, log_job_progress, log_job_start, setup_logging
@@ -254,9 +255,62 @@ def add_cors_headers(response):
     return response
 
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def index() -> Any:
-    return app.send_static_file("index.html")
+    video_url = (request.args.get("video_url") or request.args.get("url") or "").strip()
+    if not video_url:
+        return app.send_static_file("index.html")
+
+    try:
+        email = (request.args.get("email") or request.args.get("userEmail") or "").strip()
+        if not email:
+            raise ValueError("Email required")
+
+        targets = _coerce_targets(request.args.get("targets") or request.args.get("languages"))
+        include_source = _coerce_bool(request.args.get("includeSource") or request.args.get("include_source"), True)
+        profile = _safe_profile((request.args.get("profile") or "fast").lower())
+        source_language = (request.args.get("sourceLanguage") or request.args.get("source_language") or "").strip() or None
+        whisper_task = _safe_task((request.args.get("whisperTask") or request.args.get("whisper_task") or "transcribe").lower())
+        add_summary = _coerce_bool(
+            request.args.get("add_summary") or request.args.get("addSummary") or request.args.get("addSummarySelected"),
+            False,
+        )
+        summary_lang = (request.args.get("summary_lang") or os.getenv("SUMMARY_UI_LANG", "auto")).strip() or "auto"
+
+        job = enqueue_transcription_job(
+            video_url=video_url,
+            targets=targets,
+            profile=profile,
+            include_source=include_source,
+            source_language=source_language,
+            whisper_task=whisper_task,
+            upload_path=None,
+            user_email=email,
+            add_summary=add_summary,
+            summary_lang=summary_lang,
+        )
+        logger.info("Created job via GET /: job_id=%s video_url=%s", job.id, video_url)
+        return (
+            jsonify(
+                {
+                    "ok": True,
+                    "job_id": job.id,
+                }
+            ),
+            200,
+        )
+    except Exception as exc:
+        logger.exception("Failed to create job via GET /")
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": str(exc),
+                    "hint": "check Railway logs / job creator",
+                }
+            ),
+            200,
+        )
 
 
 def _compute_health_payload() -> Dict[str, Any]:
@@ -370,10 +424,69 @@ def get_public_stats() -> Any:
 
 @app.route("/jobs/<job_id>/files/<path:filename>", methods=["GET"])
 def get_job_file(job_id: str, filename: str) -> Any:
-    base_dir = (JOB_STORAGE_ROOT / job_id).resolve()
-    target = (base_dir / filename).resolve()
-    if not base_dir.exists() or not target.exists() or not target.is_file() or base_dir not in target.parents:
+    """Serve files from completed jobs with detailed logging."""
+    logger.info("=" * 80)
+    logger.info("📁 FILE REQUEST")
+    logger.info("=" * 80)
+    logger.info(f"  Job ID: {job_id}")
+    logger.info(f"  Filename: {filename}")
+
+    # Security: validate job_id format
+    if not job_id or '..' in job_id or '/' in job_id:
+        logger.warning(f"❌ Invalid job_id format: {job_id}")
         abort(404)
+
+    # Resolve paths
+    base_dir = (JOB_STORAGE_ROOT / job_id / "files").resolve()
+    logger.info(f"  Base directory: {base_dir}")
+    logger.info(f"  Base exists: {base_dir.exists()}")
+
+    if not base_dir.exists():
+        logger.warning(f"❌ Job directory not found: {base_dir}")
+
+        # List what's actually in JOB_STORAGE_ROOT
+        logger.info(f"  Available jobs in {JOB_STORAGE_ROOT}:")
+        try:
+            for item in JOB_STORAGE_ROOT.iterdir():
+                if item.is_dir():
+                    logger.info(f"    - {item.name}")
+        except Exception as e:
+            logger.error(f"  Could not list jobs: {e}")
+
+        abort(404)
+
+    # List files in job directory
+    logger.info(f"  Files in job directory:")
+    try:
+        for item in base_dir.iterdir():
+            logger.info(f"    - {item.name} ({'dir' if item.is_dir() else 'file'})")
+    except Exception as e:
+        logger.error(f"  Could not list files: {e}")
+
+    target = (base_dir / filename).resolve()
+    logger.info(f"  Target file: {target}")
+    logger.info(f"  File exists: {target.exists()}")
+
+    # Security check: ensure target is within base_dir
+    try:
+        target.relative_to(base_dir)
+    except ValueError:
+        logger.warning(f"❌ Path traversal attempt detected")
+        logger.warning(f"  Target: {target}")
+        logger.warning(f"  Base: {base_dir}")
+        abort(404)
+
+    if not target.exists():
+        logger.warning(f"❌ File not found: {target}")
+        abort(404)
+
+    if not target.is_file():
+        logger.warning(f"❌ Not a file: {target}")
+        abort(404)
+
+    logger.info(f"✅ Serving file: {filename}")
+    logger.info("=" * 80)
+
     return send_from_directory(base_dir, filename, as_attachment=False)
 
 
@@ -429,11 +542,11 @@ def create_job() -> Any:
 
         if not video_url and not upload_path:
             logger.warning("❌ No video URL or upload provided")
-            return jsonify({"error": "Bitte gib eine Video-URL an oder lade eine Datei hoch."}), 400
+            raise ValueError("Bitte gib eine Video-URL an oder lade eine Datei hoch.")
 
         if not email:
             logger.warning("❌ No email provided")
-            return jsonify({"error": "Email required"}), 400
+            raise ValueError("Email required")
 
         summary_lang = (
             (request.form.get("summary_lang") if (request.content_type and request.content_type.startswith("multipart/form-data")) else None)
@@ -459,24 +572,20 @@ def create_job() -> Any:
             ip_address = forwarded_for.split(",")[0].strip() or ip_address
 
         if not UserManager.check_ip_abuse(email, ip_address):
-            logger.warning(
-                "IP abuse detected: email=%s ip=%s", email, ip_address
-            )
-            return jsonify({"error": "Too many accounts from this IP"}), 403
+            logger.warning("IP abuse detected: email=%s ip=%s", email, ip_address)
+            raise PermissionError("Too many accounts from this IP")
 
         _, include_source_from_list, error = _parse_languages({"languages": targets})
         if error:
-            return jsonify({"error": error}), 400
+            raise ValueError(error)
         include_source_final = include_source_flag or include_source_from_list
 
         user = UserManager.get_or_create_user(email)
 
         if not UserManager.check_rate_limit(email):
             info = UserManager.get_rate_limit_info(email)
-            logger.warning(
-                "Rate limit exceeded: email=%s ip=%s info=%s", email, ip_address, info
-            )
-            return jsonify({"error": "Rate limit exceeded", "rate_limit": info}), 429
+            logger.warning("Rate limit exceeded: email=%s ip=%s info=%s", email, ip_address, info)
+            raise PermissionError(f"Rate limit exceeded: {info}")
 
         estimated_minutes = 5.0
         skip_credit_check = _DISABLE_CREDITS_CHECK or (
@@ -486,17 +595,10 @@ def create_job() -> Any:
             logger.info("Skipping quota check for email=%s ip=%s", email, ip_address)
         if not skip_credit_check and not UserManager.check_quota(email, estimated_minutes):
             stats = UserManager.get_user_stats(email) or {}
-            return (
-                jsonify(
-                    {
-                        "error": "Insufficient credits",
-                        "used": stats.get("minutes_used", 0),
-                        "quota": stats.get("minutes_quota", user.get("minutes_quota") if user else 0),
-                        "upgrade_url": "/pricing.html",
-                    }
-                ),
-                402,
-            )
+            used = stats.get("minutes_used", 0)
+            quota = stats.get("minutes_quota", user.get("minutes_quota") if user else 0)
+            logger.warning("Insufficient credits: email=%s used=%s quota=%s", email, used, quota)
+            raise PermissionError(f"Insufficient credits (used={used}, quota={quota})")
 
         UserManager.register_ip_usage(email, ip_address)
         logger.info("IP usage recorded: email=%s ip=%s", email, ip_address)
@@ -530,35 +632,45 @@ def create_job() -> Any:
         )
         log_job_start(job.id, video_url, profile, "queued")
         log_job_progress(job.id, "queued", 0.0, detail="job enqueued via API")
-    except ValueError as exc:
-        logger.error("=" * 80)
-        logger.error("❌ VALIDATION ERROR")
-        logger.error("=" * 80)
-        logger.error(f"Error: {exc}")
-        logger.exception("Full traceback:")
-        return jsonify({"error": str(exc)}), 400
+        logger.info("=" * 80)
+        logger.info(f"✅ JOB CREATED: {job.id}")
+        logger.info("=" * 80)
+        return (
+            jsonify(
+                {
+                    "ok": True,
+                    "job_id": job.id,
+                }
+            ),
+            200,
+        )
     except Exception as exc:
-        logger.error("=" * 80)
-        logger.error("❌ FAILED TO ENQUEUE JOB")
-        logger.error("=" * 80)
-        logger.error(f"Error type: {type(exc).__name__}")
-        logger.error(f"Error message: {str(exc)}")
-        logger.exception("Full traceback:")
+        logger.exception("Failed to create job")
         log_job_error("enqueue", exc)
-        return jsonify({"error": str(exc)}), 500
-
-    logger.info("=" * 80)
-    logger.info(f"✅ JOB CREATED: {job.id}")
-    logger.info("=" * 80)
-    return jsonify({"job_id": job.id}), 202
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": str(exc),
+                    "hint": "check Railway logs / job creator",
+                }
+            ),
+            200,
+        )
 
 
 @app.route("/jobs/<job_id>", methods=["GET"])
 def get_job(job_id: str) -> Any:
     try:
         payload = get_job_status(job_id)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 404
+    except Exception as exc:
+        logger.exception("Failed to load job %s", job_id)
+        return jsonify({"error": str(exc)}), 200
+
+    info = ensure_summary_materialization_safe(job_id, payload)
+    if info.get("error"):
+        payload.setdefault("warnings", []).append("summary_materialization_failed")
+        payload["summary_materialization_error"] = info["error"]
     return jsonify(payload)
 
 
@@ -657,6 +769,11 @@ def api_transcribe() -> Any:
 @app.route("/healthz", methods=["GET"])
 def healthz() -> Any:
     return jsonify({"ok": True})
+
+
+@app.route("/health", methods=["GET"])
+def basic_health() -> Any:
+    return jsonify({"status": "ok"})
 
 
 @app.route("/api/healthz", methods=["GET"])
