@@ -337,6 +337,12 @@ def _get_health_payload() -> Dict[str, Any]:
     return payload
 
 
+def _full_health_payload() -> Dict[str, Any]:
+    payload = _build_health_payload()
+    payload.update(_get_health_payload())
+    return payload
+
+
 @app.route("/health", methods=["GET"])
 def api_health() -> Any:
     try:
@@ -768,17 +774,20 @@ def api_transcribe() -> Any:
 
 @app.route("/healthz", methods=["GET"])
 def healthz() -> Any:
-    return jsonify({"ok": True})
+    """Lightweight healthcheck used by infrastructure probes."""
+    return jsonify(_full_health_payload())
 
 
 @app.route("/health", methods=["GET"])
 def basic_health() -> Any:
-    return jsonify({"status": "ok"})
+    """Backward compatible alias for the health payload."""
+    return jsonify(_full_health_payload())
 
 
 @app.route("/api/healthz", methods=["GET"])
 def healthz_legacy() -> Any:
-    return jsonify(_build_health_payload())
+    """Legacy API path returning the same health payload."""
+    return jsonify(_full_health_payload())
 
 
 @app.route("/selftest", methods=["POST"])

@@ -108,26 +108,18 @@ curl http://127.0.0.1:5000/job/$JOB
 
 ## Deploy zu Railway
 
-Dieses Repository bringt `Procfile` und `nixpacks.toml` mit, sodass Railway via Nixpacks automatisch Web- und Worker-Prozesse erzeugt.
+Railway liest die Konfiguration aus `railway.toml` und startet den Web-Service mit `uvicorn asgi:app --host 0.0.0.0 --port $PORT`. Der integrierte Healthcheck unter `/healthz` wird automatisch überwacht.
 
-1. **Projekt importieren:** In Railway auf `New Project -> Deploy from GitHub` gehen und dieses Repo auswaehlen. Die Standard-Erkennung sollte automatisch die `nixpacks.toml` nutzen (Python 3.11, ffmpeg via nix).
-2. **Variablen setzen:** Lege in Railway Shared Vars an, damit Web & Worker identisch konfiguriert werden:
-   - `REDIS_URL` (Upstash: `rediss://...`, Railway-Redis: `redis://.../0`)
-   - `NIXPACKS_CONFIG_PATH=./nixpacks.toml`
-   - `NIXPACKS_USE_NIX=1`
-   - `PIP_PREFER_BINARY=1`
-   - Optional: `WHISPER_DEVICE=cpu`, `WHISPER_CPU_MODEL_ID=tiny`
-   - Optional (nur Web-Service): `BASIC_AUTH_USERNAME`, `BASIC_AUTH_PASSWORD`
-3. **Services pruefen:** Railway legt ueber die `Procfile` zwei Prozesse an:
-   - `web`: `gunicorn app:app --bind 0.0.0.0:$PORT`
-   - `worker`: `rq worker -u $REDIS_URL default`
-4. **Redis bereitstellen:** In Railway `Add Plugin -> Redis` waehlen und die dortige URL als `REDIS_URL` eintragen.
-5. **Rebuild ohne Cache:** Im Dashboard `Settings -> Deployments -> Clear Build Cache & Deploy` fuer Web und Worker ausloesen, damit Nixpacks mit der neuen Konfiguration baut. Im Log darf kein `apt-get install ffmpeg` mehr auftauchen.
-6. **Smoke-Test:** `curl -sSf https://<WEB_URL>/healthz | jq` prueft den Healthcheck ohne Auth. Falls Basic Auth aktiv ist:
-   ```bash
-   curl -sSf -u USER:PASS -X POST https://<WEB_URL>/selftest | jq
-   curl -sSf -u USER:PASS https://<WEB_URL>/job/<JOB_ID> | jq
-   ```
+1. **Projekt importieren:** In Railway auf `New Project -> Deploy from GitHub` klicken und dieses Repository auswählen.
+2. **Environment-Variablen setzen:** Unter `Variables` als Shared Vars anlegen (für Web & Worker):
+   - Pflicht: `OPENAI_API_KEY`
+   - Typisch: `REDIS_URL`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`
+   - Optional (nur Web): `BASIC_AUTH_USERNAME`, `BASIC_AUTH_PASSWORD`
+3. **Redis bereitstellen:** Über `Add Plugin -> Redis` eine Instanz hinzufügen und die URL als `REDIS_URL` hinterlegen.
+4. **Deploy auslösen:** Dank `railway.toml` nutzt Railway automatisch den Nixpacks-Builder und setzt `PORT=8080`. Nach dem ersten Build genügt ein erneuter Deploy für Änderungen.
+5. **Smoke-Test:** `curl -sSf https://<WEB_URL>/healthz | jq` sollte `{"status":"ok"}` liefern. Für geschützte Endpunkte Basic Auth mitgeben (`-u USER:PASS`).
+
+> Tipp: Das bestehende `Procfile` definiert zusätzlich einen `worker`-Prozess (`rq worker -u $REDIS_URL default`). In Railway lässt er sich als separater Background-Service mit der gleichen Codebasis starten.
 
 ## Health Check & Benchmark
 

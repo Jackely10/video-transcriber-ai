@@ -19,6 +19,8 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-EXPOSE 5000
+ENV PORT=8080
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+EXPOSE 8080
+
+CMD ["sh", "-c", "uvicorn asgi:app --host 0.0.0.0 --port ${PORT:-8080}"]
