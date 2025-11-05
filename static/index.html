@@ -848,12 +848,21 @@
 
       const summaryLangContainer = document.getElementById("summary-lang-selector");
       const summaryLangSelect = document.getElementById("summary-lang");
+      let summaryPreferenceTouched = false;
 
       function updateSummaryLanguageVisibility() {
         if (!summaryLangContainer) {
           return;
         }
         summaryLangContainer.style.display = addSummaryInput && addSummaryInput.checked ? "block" : "none";
+      }
+
+      function applySummaryDefaultPreference(preferOn) {
+        if (!addSummaryInput || summaryPreferenceTouched) {
+          return;
+        }
+        addSummaryInput.checked = Boolean(preferOn);
+        updateSummaryLanguageVisibility();
       }
 
       let currentJobId = null;
@@ -1431,9 +1440,27 @@
 
       document.addEventListener("DOMContentLoaded", async function () {
         console.log("DOM loaded!");
-        updateSummaryLanguageVisibility();
         if (addSummaryInput) {
-          addSummaryInput.addEventListener("change", updateSummaryLanguageVisibility);
+          addSummaryInput.addEventListener("change", () => {
+            summaryPreferenceTouched = true;
+            updateSummaryLanguageVisibility();
+          });
+        }
+        updateSummaryLanguageVisibility();
+        try {
+          const response = await fetch("/api/config", { credentials: "same-origin" });
+          if (response.ok) {
+            const config = await response.json();
+            if (config && typeof config.summary_default_on === "boolean") {
+              applySummaryDefaultPreference(config.summary_default_on);
+            } else {
+              applySummaryDefaultPreference(true);
+            }
+          } else {
+            applySummaryDefaultPreference(true);
+          }
+        } catch (err) {
+          applySummaryDefaultPreference(true);
         }
 
         if (emailInput) {

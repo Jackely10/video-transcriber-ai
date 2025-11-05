@@ -78,15 +78,26 @@ Dann `http://127.0.0.1:5000/` im Browser oeffnen. Die Seite ermoeglicht:
     "video_url": "https://www.youtube.com/watch?v=VIDEO_ID",
     "whisperTask": "translate",
     "includeSource": true,
+    "summary": true,
     "profile": "fast"
   }
   ```
   Antwort: `{"job_id": "<id>"}` mit Status `202`.
 - `GET /jobs/<id>` - liefert Status, Fortschritt, Meta-Daten, RTF und Ausgabe-Pfade.
 - `GET /jobs/<id>/files/<path>` - stellt erzeugte TXT/SRT/VTT-Dateien bereit.
+- `GET /jobs/<id>/summary` - gibt die bereitgestellte Zusammenfassung als `text/plain` zurueck (404, wenn keine Zusammenfassung angefordert wurde oder der Job noch laeuft).
+- `GET /jobs/<id>/facts` - liefert bei aktiviertem Faktencheck (`FACT_CHECK=1`) strukturierte Bewertungsdaten als JSON.
+- `GET /api/config` - gibt die Server-Defaults (`summary_default_on`, `fact_check_enabled`) als JSON zurueck.
 - `GET /healthz` - liefert `{status, redis, worker_queue_len}` und ist fuer Healthchecks ohne Authentifizierung gedacht.
 - `POST /selftest` - enqueued einen internen `ping`-Job auf der Default-Queue (Basic Auth erforderlich, falls gesetzt) und liefert `{"job_id": ...}`.
 - `GET /job/<id>` - gibt den Job-Status sowie ggf. das Ergebnis zurueck; meldet `404`, wenn die ID unbekannt ist.
+
+#### Zusammenfassung & Faktencheck
+
+- Summaries sind jetzt standardmaessig aktiviert. Verwende das Feld `summary: false` (oder `add_summary: false`) im Request oder setze `SUMMARY_OFF=1`, um die automatische Zusammenfassung zu deaktivieren.
+- Der API-Body akzeptiert sowohl `summary` als auch `add_summary`; fehlt beides, greift der Default aus `SUMMARY_OFF`.
+- Setze `FACT_CHECK=1`, um strukturierte Faktencheck-Daten zu erzeugen und den Endpoint `/jobs/<id>/facts` zu aktivieren.
+- Das Frontend liest die Einstellungen ueber `GET /api/config`; eigene Clients koennen denselben Endpoint wiederverwenden.
 
 Schnelltest per `curl`:
 
@@ -117,6 +128,8 @@ Dieses Repository bringt `Procfile` und `nixpacks.toml` mit, sodass Railway via 
    - `NIXPACKS_USE_NIX=1`
    - `PIP_PREFER_BINARY=1`
    - Optional: `WHISPER_DEVICE=cpu`, `WHISPER_CPU_MODEL_ID=tiny`
+   - Optional: `SUMMARY_OFF=1` (Summaries standardmaessig deaktivieren)
+   - Optional: `FACT_CHECK=1` (Facts-Endpoint und JSON-Ausgabe aktivieren)
    - Optional (nur Web-Service): `BASIC_AUTH_USERNAME`, `BASIC_AUTH_PASSWORD`
 3. **Services pruefen:** Railway legt ueber die `Procfile` zwei Prozesse an:
    - `web`: `gunicorn app:app --bind 0.0.0.0:$PORT`
