@@ -12,6 +12,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DEFAULT_SUMMARY_LANG = os.getenv("SUMMARY_UI_LANG", "auto")
+_FLAG_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FLAG_FALSE_VALUES = {"0", "false", "no", "off"}
+
+
+def _coerce_optional_bool(value: Any) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    if text in _FLAG_TRUE_VALUES:
+        return True
+    if text in _FLAG_FALSE_VALUES:
+        return False
+    return None
+
+
+def summary_default_enabled() -> bool:
+    env_value = _coerce_optional_bool(os.getenv("SUMMARY_OFF"))
+    return not bool(env_value)
 
 import redis
 from rq import Queue, get_current_job
@@ -103,6 +125,35 @@ def _write_vtt(path: Path, segments: Iterable[SegmentResult]) -> None:
         lines.append(segment.text.strip() or "(no speech)")
         lines.append("")
     path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+
+
+def _extract_summary_facts(summary_text: str) -> List[Dict[str, str]]:
+    facts: List[Dict[str, str]] = []
+    if not summary_text:
+        return facts
+    for line in summary_text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) < 3:
+            continue
+        if all(not cell for cell in cells):
+            continue
+        if any(set(cell) <= {"-", " "} for cell in cells):
+            continue
+        lowered = [cell.lower() for cell in cells]
+        if any("behauptung" in cell or "claim" in cell for cell in lowered):
+            continue
+        cells = cells[:3]
+        facts.append(
+            {
+                "claim": cells[0],
+                "rating": cells[1],
+                "explanation": cells[2],
+            }
+        )
+    return facts
 
 
 def _export_transcripts(
@@ -199,7 +250,7 @@ def process_job(
     include_source: bool = True,
     source_language: Optional[str] = None,
     whisper_task: str = "translate",
-    add_summary: bool = False,
+    add_summary: Optional[bool] = None,
     summary_lang: Optional[str] = None,
 ) -> Dict[str, Any]:
     job = get_current_job()
@@ -220,12 +271,17 @@ def process_job(
     LOGGER.info("=" * 80)
     
     job_meta = job.meta if job else {}
-    summary_requested = bool(job_meta.get("add_summary")) if job_meta else bool(add_summary)
-    if not summary_requested:
-        summary_requested = bool(add_summary)
+    summary_requested_value = _coerce_optional_bool(job_meta.get("add_summary") if job_meta else None)
+    if summary_requested_value is None:
+        summary_requested_value = _coerce_optional_bool(add_summary)
+    if summary_requested_value is None:
+        summary_requested_value = summary_default_enabled()
+    summary_requested = bool(summary_requested_value)
+    LOGGER.info(f"  ?? Summary resolved: {summary_requested}")
     if job:
         job.meta = job_meta or {}
         job.meta["add_summary"] = summary_requested
+        job.meta["summary_requested"] = summary_requested
         job.save_meta()
     
     # Wunsch-Sprache in job.meta speichern
@@ -246,6 +302,7 @@ def process_job(
     include_source_flag = include_source
     summary_rel_path: Optional[str] = None
     summary_error: Optional[str] = None
+    summary_facts: List[Dict[str, str]] = []
 
     job_id = job.id if job else "local-run"
     job_dir = _ensure_job_dir(job_id)
@@ -454,6 +511,8 @@ def process_job(
             if not summary_content.endswith("\n"):
                 summary_content += "\n"
 
+            summary_facts = _extract_summary_facts(summary_content)
+
             summary_path.write_text(summary_content, encoding="utf-8")
             summary_rel_path = summary_path.relative_to(files_dir).as_posix()
             metadata["summary_file"] = summary_rel_path
@@ -477,6 +536,8 @@ def process_job(
             metadata["summary_error"] = summary_error
         if summary_llm_key_present is not None:
             metadata["summary_llm_key_present"] = summary_llm_key_present
+        if summary_facts:
+            metadata["summary_facts"] = summary_facts
         metadata["summary_generation_success"] = summary_generation_success
 
         total_elapsed = time.perf_counter() - overall_start
@@ -498,6 +559,8 @@ def process_job(
             result["summary_file"] = summary_rel_path
         if summary_error:
             result["summary_error"] = summary_error
+        if summary_facts:
+            result["summary_facts"] = summary_facts
 
         finished_meta: Dict[str, Any] = {
             "metadata": metadata,
@@ -509,6 +572,8 @@ def process_job(
             finished_meta["summary_file"] = summary_rel_path
         if summary_error:
             finished_meta["summary_error"] = summary_error
+        if summary_facts:
+            finished_meta["summary_facts"] = summary_facts
 
         _update_job_meta("finished", progress_accumulator, finished_meta)
         if job:
@@ -517,6 +582,8 @@ def process_job(
                 job.meta["summary_file"] = summary_rel_path
             if summary_error:
                 job.meta["summary_error"] = summary_error
+            if summary_facts:
+                job.meta["summary_facts"] = summary_facts
             job.save_meta()
         if metadata.get("audio_seconds"):
             try:
@@ -578,11 +645,15 @@ def enqueue_transcription_job(
     whisper_task: str = "translate",
     upload_path: Optional[str] = None,
     user_email: Optional[str] = None,
-    add_summary: bool = False,
+    add_summary: Optional[bool] = None,
     summary_lang: Optional[str] = None,
 ) -> Job:
     _, include_source_override = normalize_language_inputs(targets or [])
     include_source_final = include_source or include_source_override
+    summary_preference = _coerce_optional_bool(add_summary)
+    if summary_preference is None:
+        summary_preference = summary_default_enabled()
+    add_summary_final = bool(summary_preference)
     job_timeout = int(os.getenv("JOB_TIMEOUT", "3600"))
     result_ttl = int(os.getenv("JOB_RESULT_TTL", "86400"))
     job = job_queue.enqueue(
@@ -595,7 +666,7 @@ def enqueue_transcription_job(
             "include_source": include_source_final,
             "source_language": source_language,
             "whisper_task": whisper_task,
-            "add_summary": add_summary,
+            "add_summary": add_summary_final,
             "summary_lang": summary_lang or DEFAULT_SUMMARY_LANG,
         },
         job_timeout=job_timeout,
@@ -604,7 +675,8 @@ def enqueue_transcription_job(
     job.meta = job.meta or {}
     if user_email:
         job.meta["user_email"] = user_email
-    job.meta["add_summary"] = add_summary
+    job.meta["add_summary"] = add_summary_final
+    job.meta["summary_requested"] = add_summary_final
     job.meta["summary_lang"] = summary_lang or DEFAULT_SUMMARY_LANG
     job.save_meta()
     return job
