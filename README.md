@@ -98,6 +98,8 @@ Dann `http://127.0.0.1:5000/` im Browser oeffnen. Die Seite ermoeglicht:
 - Der API-Body akzeptiert sowohl `summary` als auch `add_summary`; fehlt beides, greift der Default aus `SUMMARY_OFF`.
 - Setze `FACT_CHECK=1`, um strukturierte Faktencheck-Daten zu erzeugen und den Endpoint `/jobs/<id>/facts` zu aktivieren.
 - Das Frontend liest die Einstellungen ueber `GET /api/config`; eigene Clients koennen denselben Endpoint wiederverwenden.
+- Fuer AI-Summaries musst du `AI_PROVIDER` auf `openai` oder `anthropic` setzen und den passenden Key (`OPENAI_API_KEY` bzw. `ANTHROPIC_API_KEY`) hinterlegen.
+- Sind diese Variablen nicht gesetzt bzw. der Key ungueltig, liefern `/jobs/<id>/summary` und `/jobs/<id>/facts` einen HTTP-422-Fehler mit JSON (`error`, `summary_provider`, `summary_provider_key_present`), sodass du die Deployment-Konfiguration direkt erkennen kannst.
 
 Schnelltest per `curl`:
 

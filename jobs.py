@@ -303,6 +303,8 @@ def process_job(
     summary_rel_path: Optional[str] = None
     summary_error: Optional[str] = None
     summary_facts: List[Dict[str, str]] = []
+    summary_provider_name: Optional[str] = None
+    summary_provider_key_present: Optional[bool] = None
 
     job_id = job.id if job else "local-run"
     job_dir = _ensure_job_dir(job_id)
@@ -442,19 +444,30 @@ def process_job(
                 base_language,
                 requested_lang,
             )
-            summary_llm_key_present = bool(
-                os.getenv("OPENAI_API_KEY")
-                or os.getenv("ANTHROPIC_API_KEY")
-                or os.getenv("GEMINI_API_KEY")
-                or os.getenv("GROQ_API_KEY")
+
+            provider_info = get_summary_provider_info()
+            summary_provider_name = provider_info["provider"]
+            summary_llm_key_present = provider_info["active_key_present"]
+            summary_provider_key_present = summary_llm_key_present
+            metadata["summary_provider"] = summary_provider_name
+            metadata["summary_provider_key_present"] = summary_provider_key_present
+            LOGGER.info(
+                "  Summary provider: %s (key_present=%s, openai_key=%s, anthropic_key=%s)",
+                summary_provider_name,
+                summary_llm_key_present,
+                provider_info["openai_key_present"],
+                provider_info["anthropic_key_present"],
             )
-            LOGGER.info(f"  🔑 LLM key present: {summary_llm_key_present}")
             summary_content = None
 
             if not summary_llm_key_present:
-                summary_error = summary_error or "Missing API key for AI summary generation."
-                summary_content = "AI summary not available (missing API key on server).\n"
-                LOGGER.warning("Skipping AI summary generation because no LLM key is configured.")
+                summary_error = summary_error or (
+                    f"Summary provider '{summary_provider_name}' is not configured (missing API key)."
+                )
+                LOGGER.warning(
+                    "Skipping AI summary generation because no API key is configured for %s.",
+                    summary_provider_name,
+                )
             else:
                 try:
                     target_summary_lang = (
@@ -465,17 +478,17 @@ def process_job(
                         or "en"
                     )
                     metadata["summary_lang_effective"] = target_summary_lang
-                    LOGGER.info("🚀 Calling generate_summary()...")
+                    LOGGER.info("?? Calling generate_summary()...")
                     summary_text = generate_summary(
                         base_text,
                         segments=segments,
                         target_lang=target_summary_lang,
                     )
                     LOGGER.info("=" * 80)
-                    LOGGER.info("✅ SUMMARY GENERATION SUCCESSFUL!")
+                    LOGGER.info("? SUMMARY GENERATION SUCCESSFUL!")
                     LOGGER.info("=" * 80)
-                    LOGGER.info(f"  📊 Summary length: {len(summary_text)} chars")
-                    LOGGER.info(f"  📝 Preview: {summary_text[:200]}...")
+                    LOGGER.info(f"  ?? Summary length: {len(summary_text)} chars")
+                    LOGGER.info(f"  ?? Preview: {summary_text[:200]}...")
                     LOGGER.info("=" * 80)
 
                     summary_content = summary_text.strip() + "\n"
@@ -484,51 +497,36 @@ def process_job(
                 except SummaryGenerationError as err:
                     summary_error = str(err)
                     LOGGER.error("=" * 80)
-                    LOGGER.error("❌ SUMMARY GENERATION ERROR")
+                    LOGGER.error("? SUMMARY GENERATION ERROR")
                     LOGGER.error("=" * 80)
-                    LOGGER.error(f"  🔴 Error type: SummaryGenerationError")
-                    LOGGER.error(f"  💬 Error message: {err}")
+                    LOGGER.error(f"  ?? Error type: SummaryGenerationError")
+                    LOGGER.error(f"  ?? Error message: {err}")
                     LOGGER.error("=" * 80)
                     LOGGER.exception("Full traceback:")
                     LOGGER.error("=" * 80)
-                except Exception as err:  # pragma: no cover - safeguard
+                except Exception as err:
                     summary_error = f"Summary generation failed: {err}"
                     LOGGER.error("=" * 80)
-                    LOGGER.error("❌ UNEXPECTED SUMMARY ERROR")
+                    LOGGER.error("? UNEXPECTED SUMMARY ERROR")
                     LOGGER.error("=" * 80)
-                    LOGGER.error(f"  🔴 Error type: {type(err).__name__}")
-                    LOGGER.error(f"  💬 Error message: {err}")
+                    LOGGER.error(f"  ?? Error type: {type(err).__name__}")
+                    LOGGER.error(f"  ?? Error message: {err}")
                     LOGGER.error("=" * 80)
                     LOGGER.exception("Full traceback:")
                     LOGGER.error("=" * 80)
-            summary_lang_dir = files_dir / summary_lang_code
-            summary_lang_dir.mkdir(parents=True, exist_ok=True)
-            summary_path = summary_lang_dir / "summary.txt"
 
-            if not summary_content:
-                reason = summary_error or "Summary generator returned no content."
-                summary_content = f"AI summary not available. Reason: {reason}\n"
-            if not summary_content.endswith("\n"):
-                summary_content += "\n"
+            if summary_generation_success and summary_content:
+                summary_lang_dir = files_dir / summary_lang_code
+                summary_lang_dir.mkdir(parents=True, exist_ok=True)
+                summary_path = summary_lang_dir / "summary.txt"
+                summary_path.write_text(summary_content, encoding="utf-8")
+                summary_rel_path = summary_path.relative_to(files_dir).as_posix()
+                metadata["summary_file"] = summary_rel_path
+                summary_facts = _extract_summary_facts(summary_content)
 
-            summary_facts = _extract_summary_facts(summary_content)
+            if summary_error and not summary_generation_success:
+                LOGGER.warning("Summary generation unavailable: %s", summary_error)
 
-            summary_path.write_text(summary_content, encoding="utf-8")
-            summary_rel_path = summary_path.relative_to(files_dir).as_posix()
-            metadata["summary_file"] = summary_rel_path
-
-            LOGGER.info(f"📄 Summary saved to: {summary_path}")
-            LOGGER.info(f"📋 Summary file in metadata: {metadata.get('summary_file')}")
-            try:
-                files_listing = [
-                    str(path.relative_to(files_dir))
-                    for path in files_dir.rglob("*")
-                    if path.is_file()
-                ]
-            except Exception as listing_error:  # pragma: no cover - diagnostic logging
-                LOGGER.warning("Failed to enumerate summary output files for job %s: %s", job_id, listing_error)
-            else:
-                LOGGER.info(f"📂 Files in output directory: {files_listing}")
 
         if summary_rel_path:
             metadata["summary_file"] = summary_rel_path
@@ -561,6 +559,10 @@ def process_job(
             result["summary_error"] = summary_error
         if summary_facts:
             result["summary_facts"] = summary_facts
+        if summary_provider_name:
+            result["summary_provider"] = summary_provider_name
+        if summary_provider_key_present is not None:
+            result["summary_provider_key_present"] = summary_provider_key_present
 
         finished_meta: Dict[str, Any] = {
             "metadata": metadata,
@@ -568,6 +570,10 @@ def process_job(
             "download_base": download_base,
             "status_detail": "job finished",
         }
+        if summary_provider_name:
+            finished_meta["summary_provider"] = summary_provider_name
+        if summary_provider_key_present is not None:
+            finished_meta["summary_provider_key_present"] = summary_provider_key_present
         if summary_rel_path:
             finished_meta["summary_file"] = summary_rel_path
         if summary_error:
@@ -578,6 +584,11 @@ def process_job(
         _update_job_meta("finished", progress_accumulator, finished_meta)
         if job:
             job.meta["step_times"] = step_times
+            if summary_provider_name:
+                job.meta["summary_provider"] = summary_provider_name
+            if summary_provider_key_present is not None:
+                job.meta["summary_provider_key_present"] = summary_provider_key_present
+            job.meta["summary_generation_success"] = summary_generation_success
             if summary_rel_path:
                 job.meta["summary_file"] = summary_rel_path
             if summary_error:

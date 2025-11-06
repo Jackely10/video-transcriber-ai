@@ -55,6 +55,8 @@ _UNPROTECTED_ENDPOINTS = {"api_health", "healthz", "healthz_legacy", "static"}
 _UNPROTECTED_PREFIXES = ("/health", "/api/health", "/static", "/_static")
 YTDLP_COOKIES_ENV = "YTDLP_COOKIES_B64"
 YT_COOKIES_PRESENT = bool((os.getenv(YTDLP_COOKIES_ENV) or "").strip())
+YTDLP_COOKIES_ENV = "YTDLP_COOKIES_B64"
+YT_COOKIES_PRESENT = bool((os.getenv(YTDLP_COOKIES_ENV) or "").strip())
 
 
 def _basic_auth_enabled() -> bool:
@@ -534,6 +536,48 @@ def get_job_file(job_id: str, filename: str) -> Any:
     return send_from_directory(base_dir, filename, as_attachment=False)
 
 
+def _summary_error_response(
+    job_id: str,
+    result: Dict[str, Any],
+    metadata: Dict[str, Any],
+    payload: Dict[str, Any],
+) -> Optional[Response]:
+    summary_generation_success = metadata.get("summary_generation_success")
+    def _first_non_none(*values: Any) -> Any:
+        for value in values:
+            if value is not None:
+                return value
+        return None
+
+    summary_error = _first_non_none(
+        metadata.get("summary_error"),
+        result.get("summary_error"),
+        payload.get("summary_error"),
+    )
+    if summary_error and not summary_generation_success:
+        summary_provider = _first_non_none(
+            metadata.get("summary_provider"),
+            result.get("summary_provider"),
+            payload.get("summary_provider"),
+        )
+        summary_provider_key_present = _first_non_none(
+            metadata.get("summary_provider_key_present"),
+            result.get("summary_provider_key_present"),
+            payload.get("summary_provider_key_present"),
+        )
+        response_payload: Dict[str, Any] = {
+            "job_id": job_id,
+            "error": summary_error,
+            "summary_generation_success": bool(summary_generation_success),
+        }
+        if summary_provider is not None:
+            response_payload["summary_provider"] = summary_provider
+        if summary_provider_key_present is not None:
+            response_payload["summary_provider_key_present"] = summary_provider_key_present
+        return jsonify(response_payload), 422
+    return None
+
+
 @app.route("/jobs/<job_id>/summary", methods=["GET"])
 def get_job_summary_text(job_id: str) -> Response:
     try:
@@ -554,6 +598,9 @@ def get_job_summary_text(job_id: str) -> Response:
     if not summary_requested:
         return Response("Summary not requested for this job.\n", 404, {"Content-Type": "text/plain; charset=utf-8"})
 
+    summary_error_response = _summary_error_response(job_id, result, metadata, payload)
+    if summary_error_response:
+        return summary_error_response
     info = ensure_summary_materialization_safe(job_id, payload)
     summary_path_str = info.get("summary_path")
     if not summary_path_str:
@@ -593,6 +640,11 @@ def get_job_facts(job_id: str) -> Any:
 
     result = payload.get("result") or {}
     metadata = result.get("metadata") or {}
+
+    summary_error_response = _summary_error_response(job_id, result, metadata, payload)
+    if summary_error_response:
+        return summary_error_response
+
     facts = metadata.get("summary_facts")
     if not facts:
         return jsonify({"error": "No fact-check data available"}), 404
