@@ -53,6 +53,8 @@ _BASIC_AUTH_USER_ENV = "BASIC_AUTH_USERNAME"
 _BASIC_AUTH_PASS_ENV = "BASIC_AUTH_PASSWORD"
 _UNPROTECTED_ENDPOINTS = {"api_health", "healthz", "healthz_legacy", "static"}
 _UNPROTECTED_PREFIXES = ("/health", "/api/health", "/static", "/_static")
+YTDLP_COOKIES_ENV = "YTDLP_COOKIES_B64"
+YT_COOKIES_PRESENT = bool((os.getenv(YTDLP_COOKIES_ENV) or "").strip())
 
 
 def _basic_auth_enabled() -> bool:
@@ -429,6 +431,7 @@ def api_config() -> Any:
         {
             "summary_default_on": summary_default_enabled(),
             "fact_check_enabled": FACT_CHECK_ENABLED,
+            "yt_cookies_present": YT_COOKIES_PRESENT,
         }
     )
 
