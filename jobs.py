@@ -418,7 +418,9 @@ def process_job(
         summary_llm_key_present: Optional[bool] = None
         summary_generation_success = False
         summary_lang_code: Optional[str] = None
-        summary_content: Optional[str] = None
+        summary_content_text: Optional[str] = None
+        summary_rel_path: Optional[str] = None
+        summary_facts: List[Dict[str, str]] = []
 
         if summary_requested:
             LOGGER.info("=" * 80)
@@ -448,12 +450,11 @@ def process_job(
                 or os.getenv("GEMINI_API_KEY")
                 or os.getenv("GROQ_API_KEY")
             )
-            LOGGER.info(f"  🔑 LLM key present: {summary_llm_key_present}")
-            summary_content = None
+            LOGGER.info(f"  LLM key present: {summary_llm_key_present}")
+            summary_content_text = None
 
             if not summary_llm_key_present:
                 summary_error = summary_error or "Missing API key for AI summary generation."
-                summary_content = "AI summary not available (missing API key on server).\n"
                 LOGGER.warning("Skipping AI summary generation because no LLM key is configured.")
             else:
                 try:
@@ -465,70 +466,67 @@ def process_job(
                         or "en"
                     )
                     metadata["summary_lang_effective"] = target_summary_lang
-                    LOGGER.info("🚀 Calling generate_summary()...")
+                    LOGGER.info("Calling generate_summary()...")
                     summary_text = generate_summary(
                         base_text,
                         segments=segments,
                         target_lang=target_summary_lang,
                     )
                     LOGGER.info("=" * 80)
-                    LOGGER.info("✅ SUMMARY GENERATION SUCCESSFUL!")
+                    LOGGER.info("SUMMARY GENERATION SUCCESSFUL")
                     LOGGER.info("=" * 80)
-                    LOGGER.info(f"  📊 Summary length: {len(summary_text)} chars")
-                    LOGGER.info(f"  📝 Preview: {summary_text[:200]}...")
+                    LOGGER.info(f"  Summary length: {len(summary_text)} chars")
+                    LOGGER.info(f"  Preview: {summary_text[:200]}...")
                     LOGGER.info("=" * 80)
 
-                    summary_content = summary_text.strip() + "\n"
+                    summary_content_text = summary_text.strip() + "\n"
+                    metadata["summary_content"] = summary_content_text
                     summary_generation_success = True
 
                 except SummaryGenerationError as err:
                     summary_error = str(err)
                     LOGGER.error("=" * 80)
-                    LOGGER.error("❌ SUMMARY GENERATION ERROR")
+                    LOGGER.error("SUMMARY GENERATION ERROR")
                     LOGGER.error("=" * 80)
-                    LOGGER.error(f"  🔴 Error type: SummaryGenerationError")
-                    LOGGER.error(f"  💬 Error message: {err}")
+                    LOGGER.error(f"  Error type: SummaryGenerationError")
+                    LOGGER.error(f"  Error message: {err}")
                     LOGGER.error("=" * 80)
                     LOGGER.exception("Full traceback:")
                     LOGGER.error("=" * 80)
-                except Exception as err:  # pragma: no cover - safeguard
+                except Exception as err:
                     summary_error = f"Summary generation failed: {err}"
                     LOGGER.error("=" * 80)
-                    LOGGER.error("❌ UNEXPECTED SUMMARY ERROR")
+                    LOGGER.error("UNEXPECTED SUMMARY ERROR")
                     LOGGER.error("=" * 80)
-                    LOGGER.error(f"  🔴 Error type: {type(err).__name__}")
-                    LOGGER.error(f"  💬 Error message: {err}")
+                    LOGGER.error(f"  Error type: {type(err).__name__}")
+                    LOGGER.error(f"  Error message: {err}")
                     LOGGER.error("=" * 80)
                     LOGGER.exception("Full traceback:")
                     LOGGER.error("=" * 80)
-            summary_lang_dir = files_dir / summary_lang_code
-            summary_lang_dir.mkdir(parents=True, exist_ok=True)
-            summary_path = summary_lang_dir / "summary.txt"
 
-            if not summary_content:
-                reason = summary_error or "Summary generator returned no content."
-                summary_content = f"AI summary not available. Reason: {reason}\n"
-            if not summary_content.endswith("\n"):
-                summary_content += "\n"
+            if summary_generation_success and summary_content_text:
+                summary_lang_dir = files_dir / summary_lang_code
+                summary_lang_dir.mkdir(parents=True, exist_ok=True)
+                summary_path = summary_lang_dir / "summary.txt"
+                summary_path.write_text(summary_content_text, encoding="utf-8")
+                summary_rel_path = summary_path.relative_to(files_dir).as_posix()
+                metadata["summary_file"] = summary_rel_path
+                summary_facts = _extract_summary_facts(summary_content_text)
 
-            summary_facts = _extract_summary_facts(summary_content)
-
-            summary_path.write_text(summary_content, encoding="utf-8")
-            summary_rel_path = summary_path.relative_to(files_dir).as_posix()
-            metadata["summary_file"] = summary_rel_path
-
-            LOGGER.info(f"📄 Summary saved to: {summary_path}")
-            LOGGER.info(f"📋 Summary file in metadata: {metadata.get('summary_file')}")
-            try:
-                files_listing = [
-                    str(path.relative_to(files_dir))
-                    for path in files_dir.rglob("*")
-                    if path.is_file()
-                ]
-            except Exception as listing_error:  # pragma: no cover - diagnostic logging
-                LOGGER.warning("Failed to enumerate summary output files for job %s: %s", job_id, listing_error)
+                LOGGER.info(f"Summary saved to: {summary_path}")
+                LOGGER.info(f"Summary file in metadata: {metadata.get('summary_file')}")
+                try:
+                    files_listing = [
+                        str(path.relative_to(files_dir))
+                        for path in files_dir.rglob("*")
+                        if path.is_file()
+                    ]
+                except Exception as listing_error:  # pragma: no cover - diagnostic logging
+                    LOGGER.warning("Failed to enumerate summary output files for job %s: %s", job_id, listing_error)
+                else:
+                    LOGGER.info(f"Files in output directory: {files_listing}")
             else:
-                LOGGER.info(f"📂 Files in output directory: {files_listing}")
+                summary_rel_path = None
 
         if summary_rel_path:
             metadata["summary_file"] = summary_rel_path
@@ -739,23 +737,43 @@ def materialize_summary_file_safe(job: Dict[str, Any]) -> None:
         summary_path_str = str(summary_path)
 
         summary_error = job.get("summary_error") or metadata.get("summary_error")
-        summary_content = job.get("summary_content")
-        if not summary_content:
+        summary_generation_success = (
+            job.get("summary_generation_success")
+            or metadata.get("summary_generation_success")
+        )
+        summary_content = (
+            job.get("summary_content")
+            or metadata.get("summary_content")
+        )
+
+        if summary_generation_success:
+            if not summary_content and summary_path.exists():
+                summary_content = summary_path.read_text(encoding="utf-8")
+            if summary_content:
+                if not summary_content.endswith("\n"):
+                    summary_content += "\n"
+                with summary_path.open("w", encoding="utf-8") as handle:
+                    handle.write(summary_content)
+            else:
+                LOGGER.warning(
+                    "Summary flagged as successful for job %s but no content was available; falling back to placeholder.",
+                    job_id,
+                )
+                summary_generation_success = False
+
+        if not summary_generation_success:
             reason = summary_error or "AI summary not available."
             summary_content = f"AI summary not available. Reason: {reason}\n"
-        if not summary_content.endswith("\n"):
-            summary_content += "\n"
-
-        with summary_path.open("w", encoding="utf-8") as handle:
-            handle.write(summary_content)
+            with summary_path.open("w", encoding="utf-8") as handle:
+                handle.write(summary_content)
 
         relative_path = summary_path.relative_to(files_dir).as_posix()
         metadata["summary_file"] = relative_path
         job["summary_file"] = relative_path
         job["summary_path"] = summary_path_str
 
-        LOGGER.info(f"📄 Summary saved to: {summary_path}")
-        LOGGER.info(f"📋 Summary file in metadata: {metadata.get('summary_file')}")
+        LOGGER.info("Summary saved to: %s", summary_path)
+        LOGGER.info("Summary file in metadata: %s", metadata.get("summary_file"))
         try:
             files_listing = [
                 str(path.relative_to(files_dir))
@@ -765,7 +783,7 @@ def materialize_summary_file_safe(job: Dict[str, Any]) -> None:
         except Exception as listing_error:  # pragma: no cover - diagnostic logging
             LOGGER.warning("Failed to enumerate summary output files for job %s: %s", job_id, listing_error)
         else:
-            LOGGER.info(f"📂 Files in output directory: {files_listing}")
+            LOGGER.info("Files in output directory: %s", files_listing)
 
         LOGGER.info(
             "Summary materialized safely: job_id=%s summary_lang=%s summary_path=%s llm_key_available=%s error=%s",
