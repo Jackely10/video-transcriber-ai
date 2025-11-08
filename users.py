@@ -287,5 +287,6 @@ class UserManager:
         }
 
 
-# Ensure database exists on import.
-init_database()
+# Database creation is triggered explicitly during app/server startup to avoid
+# side effects (like CI failing due to missing /app/data permissions) when this
+# module is imported. Call `init_database()` from server/app entrypoints instead.

@@ -25,7 +25,7 @@ from jobs import (
 )
 from logging_config import log_job_error, log_job_progress, log_job_start, setup_logging
 from payment import add_payment_routes
-from users import UserManager
+from users import UserManager, init_database
 from video_transcriber import (
     SUPPORTED_LANGUAGES,
     get_runtime_device_info,
@@ -46,6 +46,7 @@ logging.basicConfig(
 )
 
 app = Flask(__name__, static_folder="static", static_url_path="")
+init_database()
 add_payment_routes(app)
 logger = logging.getLogger("video_transcriber.server")
 
