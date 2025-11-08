@@ -46,7 +46,6 @@ logging.basicConfig(
 )
 
 app = Flask(__name__, static_folder="static", static_url_path="")
-init_database()
 add_payment_routes(app)
 logger = logging.getLogger("video_transcriber.server")
 
@@ -939,6 +938,13 @@ def checkout_success() -> Any:
     return jsonify({"message": "Payment successful"})
 
 
-if __name__ == "__main__":
+def _run_dev_server() -> None:
+    """Helper to run the app locally/dev with DB initialisation."""
+    init_database()
     logging.basicConfig(level=logging.INFO)
-    app.run(debug=True)
+    port = int(os.getenv("PORT", "8080"))
+    app.run(host="0.0.0.0", port=port, debug=True)
+
+
+if __name__ == "__main__":
+    _run_dev_server()
