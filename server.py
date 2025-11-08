@@ -21,6 +21,7 @@ from jobs import (
     enqueue_transcription_job,
     ensure_summary_materialization_safe,
     get_job_status,
+    summary_default_enabled,
 )
 from logging_config import log_job_error, log_job_progress, log_job_start, setup_logging
 from payment import add_payment_routes
@@ -52,6 +53,8 @@ _BASIC_AUTH_USER_ENV = "BASIC_AUTH_USERNAME"
 _BASIC_AUTH_PASS_ENV = "BASIC_AUTH_PASSWORD"
 _UNPROTECTED_ENDPOINTS = {"api_health", "healthz", "healthz_legacy", "static"}
 _UNPROTECTED_PREFIXES = ("/health", "/api/health", "/static", "/_static")
+YTDLP_COOKIES_ENV = "YTDLP_COOKIES_B64"
+YT_COOKIES_PRESENT = bool((os.getenv(YTDLP_COOKIES_ENV) or "").strip())
 
 
 def _basic_auth_enabled() -> bool:
@@ -151,6 +154,9 @@ _DISABLE_CREDITS_CHECK = os.getenv("DISABLE_CREDITS_CHECK", "").strip().lower() 
 _DISABLE_CREDITS_FOR_LOCALHOST = (
     os.getenv("DISABLE_CREDITS_FOR_LOCALHOST", "").strip().lower() in {"1", "true", "yes"}
 )
+_FLAG_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FLAG_FALSE_VALUES = {"0", "false", "no", "off"}
+FACT_CHECK_ENABLED = (os.getenv("FACT_CHECK") or "").strip().lower() in _FLAG_TRUE_VALUES
 
 
 def _parse_languages(payload: Dict[str, Any]) -> Tuple[List[str], bool, str]:
@@ -198,6 +204,29 @@ def _coerce_bool(raw: Any, default: bool = False) -> bool:
     if raw is None:
         return default
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _coerce_optional_bool(raw: Any) -> Optional[bool]:
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return raw
+    text = str(raw).strip().lower()
+    if not text:
+        return None
+    if text in _FLAG_TRUE_VALUES:
+        return True
+    if text in _FLAG_FALSE_VALUES:
+        return False
+    return None
+
+
+def _resolve_summary_flag(*values: Any) -> Optional[bool]:
+    for value in values:
+        result = _coerce_optional_bool(value)
+        if result is not None:
+            return result
+    return None
 
 
 def _safe_profile(value: str) -> str:
@@ -271,11 +300,15 @@ def index() -> Any:
         profile = _safe_profile((request.args.get("profile") or "fast").lower())
         source_language = (request.args.get("sourceLanguage") or request.args.get("source_language") or "").strip() or None
         whisper_task = _safe_task((request.args.get("whisperTask") or request.args.get("whisper_task") or "transcribe").lower())
-        add_summary = _coerce_bool(
-            request.args.get("add_summary") or request.args.get("addSummary") or request.args.get("addSummarySelected"),
-            False,
+        summary_pref = _resolve_summary_flag(
+            request.args.get("summary"),
+            request.args.get("add_summary"),
+            request.args.get("addSummary"),
+            request.args.get("addSummarySelected"),
         )
+        add_summary_effective = summary_pref if summary_pref is not None else summary_default_enabled()
         summary_lang = (request.args.get("summary_lang") or os.getenv("SUMMARY_UI_LANG", "auto")).strip() or "auto"
+        logger.info("Summary requested (GET /): %s", add_summary_effective)
 
         job = enqueue_transcription_job(
             video_url=video_url,
@@ -286,7 +319,7 @@ def index() -> Any:
             whisper_task=whisper_task,
             upload_path=None,
             user_email=email,
-            add_summary=add_summary,
+            add_summary=summary_pref,
             summary_lang=summary_lang,
         )
         logger.info("Created job via GET /: job_id=%s video_url=%s", job.id, video_url)
@@ -398,6 +431,17 @@ def _load_translation_payload(lang: str) -> Dict[str, Any]:
     return data
 
 
+@app.route("/api/config", methods=["GET"])
+def api_config() -> Any:
+    return jsonify(
+        {
+            "summary_default_on": summary_default_enabled(),
+            "fact_check_enabled": FACT_CHECK_ENABLED,
+            "yt_cookies_present": YT_COOKIES_PRESENT,
+        }
+    )
+
+
 @app.route("/api/translations/<lang>", methods=["GET"])
 def api_translations(lang: str) -> Any:
     requested = (lang or "").lower()
@@ -496,6 +540,72 @@ def get_job_file(job_id: str, filename: str) -> Any:
     return send_from_directory(base_dir, filename, as_attachment=False)
 
 
+@app.route("/jobs/<job_id>/summary", methods=["GET"])
+def get_job_summary_text(job_id: str) -> Response:
+    try:
+        payload = get_job_status(job_id)
+    except Exception as exc:
+        logger.exception("Failed to load summary for job %s", job_id)
+        return Response("Summary not available.\n", 404, {"Content-Type": "text/plain; charset=utf-8"})
+
+    status = payload.get("status")
+    result = payload.get("result") or {}
+    metadata = result.get("metadata") or {}
+    summary_requested = metadata.get("summary_requested")
+    if summary_requested is None:
+        summary_requested = bool(metadata.get("summary_file") or payload.get("summary_file"))
+
+    if status != "finished":
+        return Response("Summary not available yet.\n", 404, {"Content-Type": "text/plain; charset=utf-8"})
+    if not summary_requested:
+        return Response("Summary not requested for this job.\n", 404, {"Content-Type": "text/plain; charset=utf-8"})
+
+    info = ensure_summary_materialization_safe(job_id, payload)
+    summary_path_str = info.get("summary_path")
+    if not summary_path_str:
+        summary_rel = metadata.get("summary_file") or payload.get("summary_file")
+        if summary_rel:
+            summary_path = (JOB_STORAGE_ROOT / job_id / "files" / summary_rel).resolve()
+            summary_path_str = str(summary_path)
+    if not summary_path_str:
+        return Response("Summary not available.\n", 404, {"Content-Type": "text/plain; charset=utf-8"})
+
+    summary_path = Path(summary_path_str)
+    if not summary_path.is_file():
+        return Response("Summary not available.\n", 404, {"Content-Type": "text/plain; charset=utf-8"})
+    try:
+        content = summary_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.exception("Failed to read summary for job %s: %s", job_id, exc)
+        return Response("Summary not available.\n", 500, {"Content-Type": "text/plain; charset=utf-8"})
+
+    response = Response(content, mimetype="text/plain; charset=utf-8")
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/jobs/<job_id>/facts", methods=["GET"])
+def get_job_facts(job_id: str) -> Any:
+    if not FACT_CHECK_ENABLED:
+        return jsonify({"error": "Fact-check endpoint disabled"}), 404
+    try:
+        payload = get_job_status(job_id)
+    except Exception as exc:
+        logger.exception("Failed to load fact data for job %s", job_id)
+        return jsonify({"error": "Job not found"}), 404
+
+    if payload.get("status") != "finished":
+        return jsonify({"error": "Job not finished"}), 404
+
+    result = payload.get("result") or {}
+    metadata = result.get("metadata") or {}
+    facts = metadata.get("summary_facts")
+    if not facts:
+        return jsonify({"error": "No fact-check data available"}), 404
+
+    return jsonify({"job_id": job_id, "facts": facts})
+
+
 @app.route("/jobs", methods=["POST"])
 def create_job() -> Any:
     logger.info("=" * 80)
@@ -511,7 +621,7 @@ def create_job() -> Any:
     whisper_task = "transcribe"
 
     email: Optional[str] = None
-    add_summary = False
+    summary_pref: Optional[bool] = None
     data: Dict[str, Any] = {}
 
     try:
@@ -532,7 +642,12 @@ def create_job() -> Any:
             source_language = (form.get("sourceLanguage") or "").strip() or None
             whisper_task = _safe_task((form.get("whisperTask") or "transcribe").lower())
             email = (form.get("email") or form.get("userEmail") or form.get("user_email") or "").strip() or None
-            add_summary = _coerce_bool(form.get("add_summary") or form.get("addSummary"), False)
+            summary_pref = _resolve_summary_flag(
+                form.get("summary"),
+                form.get("add_summary"),
+                form.get("addSummary"),
+                form.get("addSummarySelected"),
+            )
         else:
             data = request.get_json(force=True, silent=True) or {}
             video_url = (data.get("video_url") or data.get("url") or "").strip() or None
@@ -542,8 +657,11 @@ def create_job() -> Any:
             source_language = (data.get("sourceLanguage") or "").strip() or None
             whisper_task = _safe_task((data.get("whisperTask") or "transcribe").lower())
             email = (data.get("email") or data.get("userEmail") or data.get("user_email") or "").strip() or None
-            add_summary = _coerce_bool(
-                data.get("add_summary") or data.get("addSummary") or data.get("addSummarySelected"), False
+            summary_pref = _resolve_summary_flag(
+                data.get("summary"),
+                data.get("add_summary"),
+                data.get("addSummary"),
+                data.get("addSummarySelected"),
             )
 
         if not video_url and not upload_path:
@@ -553,6 +671,8 @@ def create_job() -> Any:
         if not email:
             logger.warning("❌ No email provided")
             raise ValueError("Email required")
+
+        summary_requested = summary_pref if summary_pref is not None else summary_default_enabled()
 
         summary_lang = (
             (request.form.get("summary_lang") if (request.content_type and request.content_type.startswith("multipart/form-data")) else None)
@@ -566,7 +686,7 @@ def create_job() -> Any:
         logger.info(f"  🎥 Video URL: {video_url}")
         logger.info(f"  📁 Upload: {bool(upload_path)}")
         logger.info(f"  🎯 Targets: {targets}")
-        logger.info(f"  🤖 Add Summary: {add_summary}")
+        logger.info(f"  🤖 Add Summary: {summary_requested}")
         logger.info(f"  🌍 Summary Lang: {summary_lang}")
         logger.info(f"  ⚙️ Profile: {profile}")
         logger.info(f"  📝 Whisper Task: {whisper_task}")
@@ -620,7 +740,7 @@ def create_job() -> Any:
             whisper_task=whisper_task,
             upload_path=str(upload_path) if upload_path else None,
             user_email=email,
-            add_summary=add_summary,
+            add_summary=summary_pref,
             summary_lang=summary_lang,
         )
 
@@ -634,7 +754,7 @@ def create_job() -> Any:
             whisper_task,
             targets,
             include_source_final,
-            add_summary,
+            summary_requested,
         )
         log_job_start(job.id, video_url, profile, "queued")
         log_job_progress(job.id, "queued", 0.0, detail="job enqueued via API")
@@ -775,7 +895,11 @@ def api_transcribe() -> Any:
 @app.route("/healthz", methods=["GET"])
 def healthz() -> Any:
     """Lightweight healthcheck used by infrastructure probes."""
-    return jsonify(_full_health_payload())
+    payload = _full_health_payload()
+    payload["ok"] = payload.get("status") == "ok"
+    return jsonify(payload)
+
+
 
 
 @app.route("/health", methods=["GET"])

@@ -78,15 +78,26 @@ Dann `http://127.0.0.1:5000/` im Browser oeffnen. Die Seite ermoeglicht:
     "video_url": "https://www.youtube.com/watch?v=VIDEO_ID",
     "whisperTask": "translate",
     "includeSource": true,
+    "summary": true,
     "profile": "fast"
   }
   ```
   Antwort: `{"job_id": "<id>"}` mit Status `202`.
 - `GET /jobs/<id>` - liefert Status, Fortschritt, Meta-Daten, RTF und Ausgabe-Pfade.
 - `GET /jobs/<id>/files/<path>` - stellt erzeugte TXT/SRT/VTT-Dateien bereit.
+- `GET /jobs/<id>/summary` - gibt die bereitgestellte Zusammenfassung als `text/plain` zurueck (404, wenn keine Zusammenfassung angefordert wurde oder der Job noch laeuft).
+- `GET /jobs/<id>/facts` - liefert bei aktiviertem Faktencheck (`FACT_CHECK=1`) strukturierte Bewertungsdaten als JSON.
+- `GET /api/config` - gibt die Server-Defaults (`summary_default_on`, `fact_check_enabled`) als JSON zurueck.
 - `GET /healthz` - liefert `{status, redis, worker_queue_len}` und ist fuer Healthchecks ohne Authentifizierung gedacht.
 - `POST /selftest` - enqueued einen internen `ping`-Job auf der Default-Queue (Basic Auth erforderlich, falls gesetzt) und liefert `{"job_id": ...}`.
 - `GET /job/<id>` - gibt den Job-Status sowie ggf. das Ergebnis zurueck; meldet `404`, wenn die ID unbekannt ist.
+
+#### Zusammenfassung & Faktencheck
+
+- Summaries sind jetzt standardmaessig aktiviert. Verwende das Feld `summary: false` (oder `add_summary: false`) im Request oder setze `SUMMARY_OFF=1`, um die automatische Zusammenfassung zu deaktivieren.
+- Der API-Body akzeptiert sowohl `summary` als auch `add_summary`; fehlt beides, greift der Default aus `SUMMARY_OFF`.
+- Setze `FACT_CHECK=1`, um strukturierte Faktencheck-Daten zu erzeugen und den Endpoint `/jobs/<id>/facts` zu aktivieren.
+- Das Frontend liest die Einstellungen ueber `GET /api/config`; eigene Clients koennen denselben Endpoint wiederverwenden.
 
 Schnelltest per `curl`:
 
@@ -110,16 +121,18 @@ curl http://127.0.0.1:5000/job/$JOB
 
 Railway liest die Konfiguration aus `railway.toml` und startet den Web-Service mit `uvicorn asgi:app --host 0.0.0.0 --port $PORT`. Der integrierte Healthcheck unter `/healthz` wird automatisch überwacht.
 
-1. **Projekt importieren:** In Railway auf `New Project -> Deploy from GitHub` klicken und dieses Repository auswählen.
-2. **Environment-Variablen setzen:** Unter `Variables` als Shared Vars anlegen (für Web & Worker):
+1. **Projekt importieren:** In Railway auf `New Project -> Deploy from GitHub` gehen und dieses Repo ausw?hlen. Dank `railway.toml` erkennt Railway automatisch den Web-Dienst (uvicorn) und ?berwacht `/healthz`.
+2. **Environment-Variablen setzen:** Als Shared Vars f?r Web & Worker anlegen:
    - Pflicht: `OPENAI_API_KEY`
    - Typisch: `REDIS_URL`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`
    - Optional (nur Web): `BASIC_AUTH_USERNAME`, `BASIC_AUTH_PASSWORD`
-3. **Redis bereitstellen:** Über `Add Plugin -> Redis` eine Instanz hinzufügen und die URL als `REDIS_URL` hinterlegen.
-4. **Deploy auslösen:** Dank `railway.toml` nutzt Railway automatisch den Nixpacks-Builder und setzt `PORT=8080`. Nach dem ersten Build genügt ein erneuter Deploy für Änderungen.
-5. **Smoke-Test:** `curl -sSf https://<WEB_URL>/healthz | jq` sollte `{"status":"ok"}` liefern. Für geschützte Endpunkte Basic Auth mitgeben (`-u USER:PASS`).
+   - Weitere Tuning-Optionen: `SUMMARY_OFF=1`, `FACT_CHECK=1`, `WHISPER_DEVICE=cpu`, `WHISPER_CPU_MODEL_ID=tiny`, `NIXPACKS_CONFIG_PATH=./nixpacks.toml`, `NIXPACKS_USE_NIX=1`, `PIP_PREFER_BINARY=1`
+3. **Redis bereitstellen:** ?ber `Add Plugin -> Redis` eine Instanz hinzuf?gen und die URL als `REDIS_URL` hinterlegen.
+4. **Deploy/Rebuild:** Railway nutzt automatisch Nixpacks (Python 3.11 + ffmpeg). Bei Bedarf `Settings -> Deployments -> Clear Build Cache & Deploy` ausl?sen.
+5. **Services pr?fen:** Das `Procfile` definiert weiterhin `web` und `worker` (`rq worker -u $REDIS_URL default`). In Railway kannst du beide Prozesse als getrennte Services laufen lassen.
+6. **Smoke-Test:** `curl -sSf https://<WEB_URL>/healthz | jq` sollte `{"status":"ok","ok":true,...}` liefern. F?r gesch?tzte Endpunkte Basic Auth verwenden (`curl -u USER:PASS .../selftest`).
 
-> Tipp: Das bestehende `Procfile` definiert zusätzlich einen `worker`-Prozess (`rq worker -u $REDIS_URL default`). In Railway lässt er sich als separater Background-Service mit der gleichen Codebasis starten.
+
 
 ## Health Check & Benchmark
 
