@@ -169,3 +169,9 @@ Railway liest die Konfiguration aus `railway.toml` und startet den Web-Service m
 - Lass Server und Worker nach Moeglichkeit laufen, damit Whisper-Modelle im Cache bleiben und Folge-Jobs schneller sind.
 - Verwende `--whisper-task transcribe` (und tippe `source`), wenn du das Original ohne Whisper-Translate moechtest.
 - Falls `python` nicht aufrufbar ist, installiere es von https://www.python.org/downloads/ und oeffne eine neue Shell.
+
+## Railway Resource Tips
+
+- Kostenlose Railway-Container besitzen nur wenige hundert MB RAM. Setze deshalb `WHISPER_CPU_MODEL_ID=tiny` (oder `WHISPER_CPU_MODEL_ID_TRANSCRIBE`) sowie `WHISPER_CPU_MODEL_ID_TRANSLATE=Systran/faster-whisper-tiny.en`, solange kein GPU-Profil aktiv ist.
+- Aktiviere optional `WHISPER_PRELOAD_MODEL=1`, damit der Worker das Whisper-Modell direkt beim Start herunterlaedt. Wenn der Download wegen Speichermangel scheitert, siehst du den Crash sofort und kannst Scale-/Model-Entscheidungen treffen, bevor echte Jobs laufen.
+- Speicher- und CPU-Verbrauch findest du im Railway-Dashboard unter **Service → Metrics**. Wenn die Kurven dauerhaft beim Limit liegen, upgraden oder kleinere Modelle im `fast`-Profil verwenden.

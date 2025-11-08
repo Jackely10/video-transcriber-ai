@@ -117,6 +117,9 @@ def _extract_audio(input_path: Path, output_path: Path, sample_rate: int = SAMPL
 def _select_device_profile(task: str, source_language: Optional[str]) -> DeviceProfile:
     env_model = os.getenv("WHISPER_MODEL_ID")
     env_compute = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+    default_cpu_transcribe = os.getenv("WHISPER_CPU_MODEL_ID_TRANSCRIBE")
+    default_cpu_translate = os.getenv("WHISPER_CPU_MODEL_ID_TRANSLATE")
+    default_cpu_general = os.getenv("WHISPER_CPU_MODEL_ID")
 
     if torch is not None and torch.cuda.is_available() and os.getenv("WHISPER_DEVICE", "auto") != "cpu":
         model_id = env_model or os.getenv("WHISPER_GPU_MODEL_ID", "medium")
@@ -128,14 +131,17 @@ def _select_device_profile(task: str, source_language: Optional[str]) -> DeviceP
     else:
         lang = (source_language or "").lower()
         if task == "transcribe":
-            if lang.startswith("en"):
-                model_id = "Systran/faster-whisper-base.en"
-            elif lang in {"", "auto"}:
-                model_id = os.getenv("WHISPER_CPU_MODEL_ID", "base")
+            if default_cpu_general:
+                model_id = default_cpu_general
+            elif lang.startswith("en"):
+                model_id = os.getenv("WHISPER_CPU_MODEL_ID_EN", "Systran/faster-whisper-tiny.en")
             else:
-                model_id = os.getenv("WHISPER_CPU_MODEL_ID", "base")
+                model_id = default_cpu_transcribe or "tiny"
         else:
-            model_id = os.getenv("WHISPER_CPU_MODEL_ID", "Systran/faster-whisper-base.en")
+            if default_cpu_general:
+                model_id = default_cpu_general
+            else:
+                model_id = default_cpu_translate or "Systran/faster-whisper-tiny.en"
 
     return DeviceProfile(key=f"cpu_{model_id}", model_id=model_id, device="cpu", compute_type=env_compute)
 
@@ -157,6 +163,17 @@ def _load_model(profile: DeviceProfile) -> WhisperModel:
             )
             MODEL_CACHE[cache_key] = model
     return model
+
+
+def preload_default_whisper_model() -> DeviceProfile:
+    """
+    Load the default Whisper model once on startup so Railway downloads the
+    weights before jobs arrive. This helps avoid mid-job OOM kills.
+    """
+    profile = _select_device_profile(task=os.getenv("WHISPER_PRELOAD_TASK", "translate"), source_language=None)
+    logger.info("Preloading Whisper model %s (%s)", profile.model_id, profile.device)
+    _load_model(profile)
+    return profile
 
 
 def _ensure_silence_sample(duration: float = 10.0, sample_rate: int = SAMPLE_RATE) -> Path:
