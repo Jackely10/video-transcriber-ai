@@ -25,7 +25,7 @@ from jobs import (
 )
 from logging_config import log_job_error, log_job_progress, log_job_start, setup_logging
 from payment import add_payment_routes
-from users import UserManager
+from users import UserManager, init_database
 from video_transcriber import (
     SUPPORTED_LANGUAGES,
     get_runtime_device_info,
@@ -46,6 +46,7 @@ logging.basicConfig(
 )
 
 app = Flask(__name__, static_folder="static", static_url_path="")
+init_database()
 add_payment_routes(app)
 logger = logging.getLogger("video_transcriber.server")
 
@@ -367,6 +368,12 @@ def _get_health_payload() -> Dict[str, Any]:
     payload = _compute_health_payload()
     _HEALTH_CACHE["payload"] = payload
     _HEALTH_CACHE["timestamp"] = now
+    return payload
+
+
+def _full_health_payload() -> Dict[str, Any]:
+    payload = _build_health_payload()
+    payload.update(_get_health_payload())
     return payload
 
 
@@ -888,19 +895,24 @@ def api_transcribe() -> Any:
 
 @app.route("/healthz", methods=["GET"])
 def healthz() -> Any:
-    payload = _build_health_payload()
+    """Lightweight healthcheck used by infrastructure probes."""
+    payload = _full_health_payload()
     payload["ok"] = payload.get("status") == "ok"
     return jsonify(payload)
 
 
+
+
 @app.route("/health", methods=["GET"])
 def basic_health() -> Any:
-    return jsonify({"status": "ok"})
+    """Backward compatible alias for the health payload."""
+    return jsonify(_full_health_payload())
 
 
 @app.route("/api/healthz", methods=["GET"])
 def healthz_legacy() -> Any:
-    return jsonify(_build_health_payload())
+    """Legacy API path returning the same health payload."""
+    return jsonify(_full_health_payload())
 
 
 @app.route("/selftest", methods=["POST"])

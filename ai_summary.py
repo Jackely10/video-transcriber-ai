@@ -11,21 +11,29 @@ logger = logging.getLogger(__name__)
 AI_PROVIDER = os.getenv("AI_PROVIDER", "openai").lower()
 DEFAULT_MODEL = os.getenv("OPENAI_SUMMARY_MODEL", "gpt-4o-mini")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
+OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
+ANTHROPIC_API_KEY = (os.getenv("ANTHROPIC_API_KEY") or "").strip()
 
 logger.info(f"🔍 AI_PROVIDER: {AI_PROVIDER}")
-logger.info(f"🔑 ANTHROPIC_API_KEY gesetzt: {bool(os.getenv('ANTHROPIC_API_KEY'))}")
-logger.info(f"🔑 OPENAI_API_KEY gesetzt: {bool(os.getenv('OPENAI_API_KEY'))}")
+logger.info(f"🔑 ANTHROPIC_API_KEY gesetzt: {bool(ANTHROPIC_API_KEY)}")
+logger.info(f"🔑 OPENAI_API_KEY gesetzt: {bool(OPENAI_API_KEY)}")
 logger.info(f"📝 ANTHROPIC_MODEL: {ANTHROPIC_MODEL}")
 logger.info(f"📝 OPENAI_MODEL: {DEFAULT_MODEL}")
 
 if AI_PROVIDER == "anthropic":
-    anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
     openai_client = None
-    logger.info(f"✅ Anthropic client initialized with model: {ANTHROPIC_MODEL}")
+    if anthropic_client:
+        logger.info("✅ Anthropic client initialized with model: %s", ANTHROPIC_MODEL)
+    else:
+        logger.warning("⚠️ Anthropic API key missing – summaries will fail until configured.")
 else:
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
     anthropic_client = None
-    logger.info(f"✅ OpenAI client initialized with model: {DEFAULT_MODEL}")
+    if openai_client:
+        logger.info("✅ OpenAI client initialized with model: %s", DEFAULT_MODEL)
+    else:
+        logger.warning("⚠️ OpenAI API key missing – summaries will fail until configured.")
 
 
 class SummaryGenerationError(Exception):

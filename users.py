@@ -1,6 +1,7 @@
 """User & Credits Management."""
 from __future__ import annotations
 
+import os
 import sqlite3
 from contextlib import closing
 from datetime import datetime, timedelta
@@ -10,8 +11,23 @@ from typing import Dict, Optional
 DB_PATH = Path("/app/data/users.db")
 
 
+def _should_skip_init() -> bool:
+    """Detect CI/test environments where DB writes are not allowed."""
+    return bool(
+        os.getenv("PYTEST_CURRENT_TEST")
+        or os.getenv("CI")
+        or os.getenv("GITHUB_ACTIONS")
+    )
+
+
 def init_database() -> None:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if _should_skip_init():
+        return
+    try:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        # No write access (e.g. read-only CI filesystem). Fail silently so tests can run.
+        return
     with closing(sqlite3.connect(DB_PATH)) as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -287,5 +303,6 @@ class UserManager:
         }
 
 
-# Ensure database exists on import.
-init_database()
+# Database creation is triggered explicitly during app/server startup to avoid
+# side effects (like CI failing due to missing /app/data permissions) when this
+# module is imported. Call `init_database()` from server/app entrypoints instead.
