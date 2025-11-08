@@ -10,8 +10,10 @@ healthcheckPath = "/healthz"
 
 [[deploy.services]]
 name = "web"
+source = "."
 startCommand = "sh -c \"uvicorn asgi:app --host 0.0.0.0 --port ${PORT:-8080}\""
 
 [[deploy.services]]
 name = "worker"
+source = "."
 startCommand = "python worker.py"
