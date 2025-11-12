@@ -1,9 +1,13 @@
-"""ASGI entrypoint for running the Flask app with Uvicorn."""
+# asgi.py  (im Ordner, den Railway als Root Directory nutzt)
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
-from asgiref.wsgi import WsgiToAsgi
+app = FastAPI()
 
-from server import app as flask_app
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
 
-# Wrap the existing WSGI Flask app so it can be served by an ASGI server.
-app = WsgiToAsgi(flask_app)
-
+@app.get("/")
+def index():
+    return JSONResponse({"status": "ok", "service": "video-transcriber web"})
